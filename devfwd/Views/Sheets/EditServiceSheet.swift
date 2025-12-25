@@ -127,6 +127,9 @@ struct EditServiceSheet: View {
                 if !availableVariables.isEmpty {
                     variableHintBox
                 }
+
+                // Sample commands
+                sampleCommandsSection
             }
 
             Spacer()
@@ -155,7 +158,7 @@ struct EditServiceSheet: View {
             .padding(.top, 20)
         }
         .padding(24)
-        .frame(width: 500, height: 520)
+        .frame(width: 600, height: 700)
         .onAppear {
             serviceName = service.name
             ports = service.ports
@@ -178,6 +181,35 @@ struct EditServiceSheet: View {
                         .background(Color.accentColor.opacity(0.1))
                         .cornerRadius(4)
                 }
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(nsColor: .controlBackgroundColor))
+        .cornerRadius(8)
+    }
+
+    private var sampleCommandsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Example Commands")
+                .font(.caption)
+                .foregroundColor(.secondary)
+
+            VStack(spacing: 6) {
+                SampleCommandRowEdit(
+                    title: "Kubernetes Port Forward",
+                    command: "kubectl port-forward --address $IP svc/my-service 5432:5432 --context my-cluster"
+                )
+
+                SampleCommandRowEdit(
+                    title: "Cloudflare Tunnel",
+                    command: "cloudflared access tcp --hostname $IP --url my-tunnel.example.com 8080"
+                )
+
+                SampleCommandRowEdit(
+                    title: "SSH Tunnel",
+                    command: "ssh -N -L $IP:3306:localhost:3306 user@bastion.example.com"
+                )
             }
         }
         .padding(12)
@@ -224,6 +256,43 @@ struct EditServiceSheet: View {
         updatedService.ports = ports.trimmingCharacters(in: .whitespaces)
         updatedService.command = command.trimmingCharacters(in: .whitespaces)
         onSave(updatedService)
+    }
+}
+
+/// Row displaying a sample command with copy button
+struct SampleCommandRowEdit: View {
+    let title: String
+    let command: String
+    @State private var copied = false
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                Text(verbatim: command)
+                    .font(.system(.caption, design: .monospaced))
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 30)
+
+            Button {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(command, forType: .string)
+                copied = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                    copied = false
+                }
+            } label: {
+                Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                    .foregroundColor(copied ? .green : .secondary)
+            }
+            .buttonStyle(.plain)
+            .help("Copy to clipboard")
+        }
+        .padding(.vertical, 4)
     }
 }
 

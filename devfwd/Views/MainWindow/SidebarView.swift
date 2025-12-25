@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Sidebar showing the list of environments
 struct SidebarView: View {
@@ -6,6 +7,11 @@ struct SidebarView: View {
     @State private var environmentToDelete: DevEnvironment?
     @State private var showingDeleteConfirmation = false
     @State private var showingCannotDeleteAlert = false
+
+    // Import/Export state
+    @State private var importPreview: ImportPreview?
+    @State private var importError: ImportError?
+    @State private var showingImportError = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -35,6 +41,14 @@ struct SidebarView: View {
                             appState.selectedEnvironmentId = environment.id
                         }
                         .contextMenu {
+                            Button {
+                                exportEnvironment(environment)
+                            } label: {
+                                Label("Export...", systemImage: "square.and.arrow.up")
+                            }
+
+                            Divider()
+
                             Button(role: .destructive) {
                                 if environment.isEnabled || environment.isTransitioning {
                                     showingCannotDeleteAlert = true
@@ -69,24 +83,106 @@ struct SidebarView: View {
 
             Divider()
 
-            // Footer with new environment button
-            Button(action: createNewEnvironment) {
-                HStack {
-                    Image(systemName: "plus")
-                    Text("New Environment")
+            // Footer with new environment and import buttons
+            VStack(spacing: 0) {
+                Button(action: createNewEnvironment) {
+                    HStack {
+                        Image(systemName: "plus")
+                        Text("New Environment")
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
+                .buttonStyle(.plain)
+                .foregroundColor(.accentColor)
+
+                Button(action: importEnvironment) {
+                    HStack {
+                        Image(systemName: "square.and.arrow.down")
+                        Text("Import...")
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(.secondary)
             }
-            .buttonStyle(.plain)
-            .foregroundColor(.accentColor)
         }
         .background(Color(nsColor: .controlBackgroundColor))
+        .sheet(item: $importPreview) { preview in
+            ImportPreviewSheet(
+                preview: preview,
+                onImport: { name, useSuggestedIPs in
+                    appState.importEnvironment(preview, name: name, useSuggestedIPs: useSuggestedIPs)
+                    importPreview = nil
+                },
+                onCancel: {
+                    importPreview = nil
+                }
+            )
+        }
+        .alert("Import Error", isPresented: $showingImportError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(importError?.localizedDescription ?? "Unknown error")
+        }
     }
 
     private func createNewEnvironment() {
         _ = appState.createEnvironment()
+    }
+
+    private func exportEnvironment(_ environment: DevEnvironment) {
+        guard let data = appState.exportEnvironment(environment.id) else { return }
+
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "\(environment.name).orbit.json"
+        panel.allowedContentTypes = [UTType.json]
+        panel.canCreateDirectories = true
+
+        panel.begin { response in
+            if response == .OK, let url = panel.url {
+                do {
+                    try data.write(to: url)
+                } catch {
+                    print("Failed to export: \(error)")
+                }
+            }
+        }
+    }
+
+    private func importEnvironment() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [UTType.json]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+
+            do {
+                let data = try Data(contentsOf: url)
+
+                DispatchQueue.main.async {
+                    let result = appState.validateImport(data)
+
+                    switch result {
+                    case .success(let preview):
+                        importPreview = preview
+                    case .failure(let error):
+                        importError = error
+                        showingImportError = true
+                    }
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    importError = .invalidJSON(error)
+                    showingImportError = true
+                }
+            }
+        }
     }
 }
 

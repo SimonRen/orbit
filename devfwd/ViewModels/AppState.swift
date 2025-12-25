@@ -601,6 +601,172 @@ final class AppState: ObservableObject {
 
         return "\(baseName) \(counter)"
     }
+
+    // MARK: - Export/Import
+
+    /// Export an environment to JSON data
+    func exportEnvironment(_ id: UUID) -> Data? {
+        guard let env = environments.first(where: { $0.id == id }) else { return nil }
+
+        let exportedEnv = ExportedEnvironment(from: env)
+        let export = EnvironmentExport(environment: exportedEnv)
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+
+        return try? encoder.encode(export)
+    }
+
+    /// Validate import data and return a preview
+    func validateImport(_ data: Data) -> Result<ImportPreview, ImportError> {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        let export: EnvironmentExport
+        do {
+            export = try decoder.decode(EnvironmentExport.self, from: data)
+        } catch {
+            return .failure(.invalidJSON(error))
+        }
+
+        // Check version compatibility
+        guard export.version == "1.0" else {
+            return .failure(.unsupportedVersion(export.version))
+        }
+
+        let imported = export.environment
+
+        // Check for empty data
+        guard !imported.name.isEmpty else {
+            return .failure(.emptyEnvironment)
+        }
+
+        // Validate IP addresses
+        for ip in imported.interfaces {
+            if !isValidIPAddress(ip) {
+                return .failure(.invalidIPFormat(ip))
+            }
+        }
+
+        // Check for name conflicts
+        let existingNames = Set(environments.map { $0.name.lowercased() })
+        let hasNameConflict = existingNames.contains(imported.name.lowercased())
+        let suggestedName = hasNameConflict ? generateUniqueImportName(imported.name) : imported.name
+
+        // Check for IP conflicts
+        let usedIPs = Set(environments.flatMap { $0.interfaces })
+        let conflictingIPs = Set(imported.interfaces).intersection(usedIPs)
+        let hasIPConflicts = !conflictingIPs.isEmpty
+        let suggestedInterfaces = hasIPConflicts
+            ? suggestAlternativeIPs(for: imported.interfaces)
+            : imported.interfaces
+
+        return .success(ImportPreview(
+            originalName: imported.name,
+            originalInterfaces: imported.interfaces,
+            services: imported.services,
+            suggestedName: suggestedName,
+            suggestedInterfaces: suggestedInterfaces,
+            hasNameConflict: hasNameConflict,
+            hasIPConflicts: hasIPConflicts,
+            conflictingIPs: conflictingIPs
+        ))
+    }
+
+    /// Import an environment from a validated preview
+    @discardableResult
+    func importEnvironment(_ preview: ImportPreview, name: String, useSuggestedIPs: Bool = true) -> DevEnvironment {
+        let interfaces = useSuggestedIPs ? preview.suggestedInterfaces : preview.originalInterfaces
+
+        // Create services with new UUIDs
+        var newServices: [Service] = []
+        for exportedService in preview.services {
+            let service = Service(
+                id: UUID(),
+                name: exportedService.name,
+                ports: exportedService.ports,
+                command: exportedService.command,
+                isEnabled: exportedService.isEnabled,
+                order: exportedService.order
+            )
+            newServices.append(service)
+        }
+
+        let newEnv = DevEnvironment(
+            id: UUID(),
+            name: name,
+            interfaces: interfaces,
+            services: newServices,
+            order: environments.count
+        )
+
+        environments.append(newEnv)
+        selectedEnvironmentId = newEnv.id
+        return newEnv
+    }
+
+    private func generateUniqueImportName(_ baseName: String) -> String {
+        let existingNames = Set(environments.map { $0.name.lowercased() })
+        let importedName = "\(baseName) (Imported)"
+
+        if !existingNames.contains(importedName.lowercased()) {
+            return importedName
+        }
+
+        var counter = 2
+        while existingNames.contains("\(baseName) (Imported \(counter))".lowercased()) {
+            counter += 1
+        }
+
+        return "\(baseName) (Imported \(counter))"
+    }
+
+    private func suggestAlternativeIPs(for interfaces: [String]) -> [String] {
+        var usedIPs = Set(environments.flatMap { $0.interfaces })
+        var suggestedIPs: [String] = []
+
+        for _ in interfaces {
+            let nextIP = findNextAvailableIP(excluding: usedIPs)
+            suggestedIPs.append(nextIP)
+            usedIPs.insert(nextIP)
+        }
+
+        return suggestedIPs
+    }
+
+    private func findNextAvailableIP(excluding usedIPs: Set<String>) -> String {
+        // Try 127.0.0.x range first
+        for i in 2...254 {
+            let candidate = "127.0.0.\(i)"
+            if !usedIPs.contains(candidate) {
+                return candidate
+            }
+        }
+
+        // Fallback to 127.0.1.x range
+        for i in 1...254 {
+            let candidate = "127.0.1.\(i)"
+            if !usedIPs.contains(candidate) {
+                return candidate
+            }
+        }
+
+        return "127.0.0.2"
+    }
+
+    private func isValidIPAddress(_ ip: String) -> Bool {
+        let parts = ip.split(separator: ".")
+        guard parts.count == 4 else { return false }
+
+        for part in parts {
+            guard let num = Int(part), num >= 0, num <= 255 else {
+                return false
+            }
+        }
+
+        return true
+    }
 }
 
 // MARK: - App Errors
