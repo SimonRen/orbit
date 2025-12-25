@@ -83,15 +83,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     }
 
     private func setupPopover() {
+        guard let appState = appState else { return }
+
         popover = NSPopover()
         popover?.contentSize = NSSize(width: 220, height: 200)
         popover?.behavior = .transient
         popover?.delegate = self
-        updatePopoverContent()
-    }
 
-    private func updatePopoverContent() {
-        guard let appState = appState else { return }
+        // Create content view once - SwiftUI will handle updates via @ObservedObject
         let contentView = StatusMenuView(appState: appState) { [weak self] in
             self?.closePopover()
         }
@@ -106,42 +105,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     }
 
     private func observeStateChanges() {
-        // Rebuild menu when environments change
+        // Cache environments for status icon (SwiftUI handles popover updates)
         appState?.$environments
             .receive(on: RunLoop.main)
             .sink { [weak self] environments in
                 self?.cachedEnvironments = environments
-                self?.updatePopoverContent()
-                self?.updateStatusIcon()
             }
             .store(in: &cancellables)
     }
 
     private func updateStatusIcon() {
-        guard let button = statusItem?.button else { return }
-
-        let hasActive = cachedEnvironments.contains { $0.isEnabled }
-        let hasFailed = cachedEnvironments.flatMap { $0.services }.contains { $0.status == .failed }
-
-        if hasFailed {
-            button.image = NSImage(
-                systemSymbolName: "exclamationmark.arrow.triangle.2.circlepath",
-                accessibilityDescription: "DEV Fwd - Warning"
-            )
-            button.contentTintColor = .systemRed
-        } else if hasActive {
-            button.image = NSImage(
-                systemSymbolName: "arrow.triangle.branch",
-                accessibilityDescription: "DEV Fwd - Active"
-            )
-            button.contentTintColor = .controlAccentColor
-        } else {
-            button.image = NSImage(
-                systemSymbolName: "arrow.triangle.branch",
-                accessibilityDescription: "DEV Fwd"
-            )
-            button.contentTintColor = nil
-        }
+        // Icon stays the same - no color changes needed
     }
 
     // MARK: - Popover Control
@@ -160,8 +134,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     private func showPopover() {
         guard let button = statusItem?.button, let popover = popover else { return }
-
-        updatePopoverContent()
 
         // Show popover relative to the button
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
@@ -203,13 +175,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         NSApp.terminate(nil)
     }
 
-    func toggleEnvironment(_ id: UUID) {
-        appState?.toggleEnvironment(id)
-    }
-
-    func canToggleEnvironment(_ id: UUID) -> Bool {
-        appState?.canToggleEnvironment(id) ?? false
-    }
 }
 
 // MARK: - Status Menu SwiftUI View
@@ -239,7 +204,6 @@ struct StatusMenuView: View {
                 ForEach(appState.sortedEnvironments) { environment in
                     EnvironmentMenuRow(
                         environment: environment,
-                        canToggle: appState.canToggleEnvironment(environment.id),
                         onToggle: {
                             appState.toggleEnvironment(environment.id)
                         }
@@ -295,7 +259,6 @@ struct StatusMenuView: View {
 
 struct EnvironmentMenuRow: View {
     let environment: DevEnvironment
-    let canToggle: Bool
     let onToggle: () -> Void
 
     var body: some View {
@@ -316,7 +279,6 @@ struct EnvironmentMenuRow: View {
                 ))
                 .toggleStyle(.switch)
                 .controlSize(.mini)
-                .disabled(!canToggle)
             }
         }
         .padding(.horizontal, 12)
