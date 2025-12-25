@@ -41,6 +41,16 @@ struct ContentView: View {
         } message: {
             Text("Orbit needs to install a privileged helper to manage network interfaces. This requires administrator permission once.")
         }
+        .alert("Upgrade Helper", isPresented: $appState.showHelperUpgradePrompt) {
+            Button("Upgrade") {
+                Task {
+                    await appState.installHelper()
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Orbit needs to upgrade its privileged helper to a newer version. This requires administrator permission.")
+        }
     }
 }
 

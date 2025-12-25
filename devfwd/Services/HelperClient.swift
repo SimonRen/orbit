@@ -44,6 +44,8 @@ final class HelperClient: ObservableObject {
     static let shared = HelperClient()
 
     @Published private(set) var isHelperInstalled = false
+    @Published private(set) var needsUpgrade = false
+    @Published private(set) var installedVersion: String?
 
     private var connection: NSXPCConnection?
 
@@ -53,18 +55,22 @@ final class HelperClient: ObservableObject {
 
     // MARK: - Installation
 
-    /// Check if helper is installed and running
+    /// Check if helper is installed, running, and up-to-date
     func checkHelperStatus() {
-        // Try to connect and get version
         getHelperProxy { [weak self] proxy in
             proxy?.getVersion { version in
                 DispatchQueue.main.async {
                     self?.isHelperInstalled = true
+                    self?.installedVersion = version
+                    // Compare versions - upgrade needed if installed version differs from expected
+                    self?.needsUpgrade = (version != HelperConstants.helperVersion)
                 }
             }
         } errorHandler: { [weak self] in
             DispatchQueue.main.async {
                 self?.isHelperInstalled = false
+                self?.needsUpgrade = false
+                self?.installedVersion = nil
             }
         }
     }
@@ -114,6 +120,8 @@ final class HelperClient: ObservableObject {
 
         if success {
             isHelperInstalled = true
+            needsUpgrade = false
+            installedVersion = HelperConstants.helperVersion
         } else {
             let errorDesc = error?.takeRetainedValue().localizedDescription ?? "Unknown error"
             throw HelperClientError.installationFailed(errorDesc)

@@ -86,18 +86,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     }
 
     private func setupPopover() {
-        guard let appState = appState else { return }
-
         popover = NSPopover()
         popover?.contentSize = NSSize(width: 220, height: 200)
         popover?.behavior = .transient
         popover?.delegate = self
-
-        // Create content view once - SwiftUI will handle updates via @ObservedObject
-        let contentView = StatusMenuView(appState: appState) { [weak self] in
-            self?.closePopover()
-        }
-        popover?.contentViewController = NSHostingController(rootView: contentView)
+        // Content is created lazily in showPopover() to avoid idle CPU usage
     }
 
     private func addEventMonitor() {
@@ -185,7 +178,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     }
 
     private func showPopover() {
-        guard let button = statusItem?.button, let popover = popover else { return }
+        guard let button = statusItem?.button, let popover = popover, let appState = appState else { return }
+
+        // Create content lazily to avoid idle CPU usage from SwiftUI's CVDisplayLink
+        let contentView = StatusMenuView(appState: appState) { [weak self] in
+            self?.closePopover()
+        }
+        popover.contentViewController = NSHostingController(rootView: contentView)
 
         // Show popover relative to the button
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
@@ -209,6 +208,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     nonisolated func popoverDidClose(_ notification: Notification) {
         Task { @MainActor in
             removeEventMonitor()
+            // Destroy content to stop SwiftUI's CVDisplayLink and save CPU
+            popover?.contentViewController = nil
         }
     }
 

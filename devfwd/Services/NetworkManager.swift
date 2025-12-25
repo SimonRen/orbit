@@ -33,6 +33,16 @@ final class NetworkManager {
         helperClient.isHelperInstalled
     }
 
+    /// Whether the helper needs to be upgraded to a newer version
+    var needsUpgrade: Bool {
+        helperClient.needsUpgrade
+    }
+
+    /// The currently installed helper version (nil if not installed)
+    var installedVersion: String? {
+        helperClient.installedVersion
+    }
+
     private init() {}
 
     // MARK: - Helper Installation

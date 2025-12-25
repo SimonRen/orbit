@@ -11,10 +11,16 @@ final class AppState: ObservableObject {
     @Published var guestMode: Bool = false
     @Published var lastError: AppError?
     @Published var showHelperInstallPrompt: Bool = false
+    @Published var showHelperUpgradePrompt: Bool = false
 
     /// Whether the privileged helper is installed
     var isHelperInstalled: Bool {
         networkManager?.isHelperInstalled ?? false
+    }
+
+    /// Whether the helper needs upgrading
+    var helperNeedsUpgrade: Bool {
+        networkManager?.needsUpgrade ?? false
     }
 
     // MARK: - Runtime State
@@ -410,10 +416,16 @@ final class AppState: ObservableObject {
         }
         lastEnvironmentToggleTime[id] = Date()
 
-        // Check if helper is installed before activating
-        if !env.isEnabled && !isHelperInstalled {
-            showHelperInstallPrompt = true
-            return
+        // Check if helper is installed and up-to-date before activating
+        if !env.isEnabled {
+            if !isHelperInstalled {
+                showHelperInstallPrompt = true
+                return
+            }
+            if helperNeedsUpgrade {
+                showHelperUpgradePrompt = true
+                return
+            }
         }
 
         if env.isEnabled {
@@ -441,13 +453,14 @@ final class AppState: ObservableObject {
         return true
     }
 
-    /// Install the privileged helper (one-time admin auth)
+    /// Install or upgrade the privileged helper (requires admin auth)
     func installHelper() async {
         guard let networkManager = networkManager else { return }
 
         do {
             try await networkManager.installHelper()
             showHelperInstallPrompt = false
+            showHelperUpgradePrompt = false
         } catch {
             lastError = .privilegeError(error.localizedDescription)
         }
