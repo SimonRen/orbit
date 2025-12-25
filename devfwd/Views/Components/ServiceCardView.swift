@@ -71,7 +71,7 @@ struct ServiceCardView: View {
                 Button(action: onEdit) {
                     Label("Edit", systemImage: "pencil")
                 }
-                .disabled(isEnvironmentActive || isEnvironmentTransitioning)
+                .disabled(isEnvironmentTransitioning || service.status == .running || service.status.isTransitioning)
 
                 Divider()
 
