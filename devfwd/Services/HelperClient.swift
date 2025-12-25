@@ -1,5 +1,21 @@
 import Foundation
 import ServiceManagement
+import os.lock
+
+/// Thread-safe flag that can only be set once (for continuation safety)
+private final class OnceFlag: @unchecked Sendable {
+    private var _value = false
+    private let lock = OSAllocatedUnfairLock()
+
+    /// Try to set the flag. Returns true if this call set it, false if already set.
+    func trySet() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        if _value { return false }
+        _value = true
+        return true
+    }
+}
 
 /// Error types for helper operations
 enum HelperClientError: LocalizedError {
@@ -118,8 +134,12 @@ final class HelperClient: ObservableObject {
     /// Add a loopback interface alias
     func addInterfaceAlias(_ ip: String) async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            // Use a class to track if continuation was already resumed (XPC can fire multiple handlers)
+            let resumed = OnceFlag()
+
             getHelperProxy { proxy in
                 proxy?.addInterfaceAlias(ip) { success, errorMessage in
+                    guard resumed.trySet() else { return }
                     if success {
                         continuation.resume()
                     } else {
@@ -127,6 +147,7 @@ final class HelperClient: ObservableObject {
                     }
                 }
             } errorHandler: {
+                guard resumed.trySet() else { return }
                 continuation.resume(throwing: HelperClientError.connectionFailed)
             }
         }
@@ -135,8 +156,11 @@ final class HelperClient: ObservableObject {
     /// Remove a loopback interface alias
     func removeInterfaceAlias(_ ip: String) async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            let resumed = OnceFlag()
+
             getHelperProxy { proxy in
                 proxy?.removeInterfaceAlias(ip) { success, errorMessage in
+                    guard resumed.trySet() else { return }
                     if success {
                         continuation.resume()
                     } else {
@@ -144,6 +168,7 @@ final class HelperClient: ObservableObject {
                     }
                 }
             } errorHandler: {
+                guard resumed.trySet() else { return }
                 continuation.resume(throwing: HelperClientError.connectionFailed)
             }
         }
