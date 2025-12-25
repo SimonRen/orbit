@@ -128,6 +128,11 @@ struct SidebarView: View {
         } message: {
             Text(importError?.localizedDescription ?? "Unknown error")
         }
+        .onAppear {
+            WindowCoordinator.shared.triggerImport = { [self] in
+                importEnvironment()
+            }
+        }
     }
 
     private func createNewEnvironment() {

@@ -5,6 +5,7 @@ class WindowCoordinator: ObservableObject {
     static let shared = WindowCoordinator()
     var openMainWindow: (() -> Void)?
     var openLogWindow: ((UUID) -> Void)?  // Opens log window for service ID
+    var triggerImport: (() -> Void)?  // Triggers import dialog
 }
 
 @main
@@ -57,6 +58,11 @@ struct OrbitApp: App {
                     _ = appState.createEnvironment()
                 }
                 .keyboardShortcut("n", modifiers: .command)
+
+                Button("Import...") {
+                    WindowCoordinator.shared.triggerImport?()
+                }
+                .keyboardShortcut("i", modifiers: .command)
             }
 
             // Custom menu for environments

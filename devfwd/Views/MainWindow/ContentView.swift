@@ -43,12 +43,38 @@ struct ContentView: View {
     }
 }
 
-/// Helper to access NSWindow and adjust traffic light positions
+/// Helper to access NSWindow, adjust traffic light positions, and persist frame
 struct WindowAccessor: NSViewRepresentable {
+    private static let frameKey = "MainWindowFrame"
+
     func makeNSView(context: Context) -> NSView {
         let view = NSView()
         DispatchQueue.main.async {
             if let window = view.window {
+                // Restore saved frame if available
+                if let frameString = UserDefaults.standard.string(forKey: Self.frameKey) {
+                    let savedFrame = NSRectFromString(frameString)
+                    if savedFrame.width >= 800 && savedFrame.height >= 500 {
+                        window.setFrame(savedFrame, display: true)
+                    }
+                }
+
+                // Observe frame changes to save them
+                NotificationCenter.default.addObserver(
+                    forName: NSWindow.didResizeNotification,
+                    object: window,
+                    queue: .main
+                ) { _ in
+                    Self.saveFrame(window.frame)
+                }
+                NotificationCenter.default.addObserver(
+                    forName: NSWindow.didMoveNotification,
+                    object: window,
+                    queue: .main
+                ) { _ in
+                    Self.saveFrame(window.frame)
+                }
+
                 // Adjust traffic light button positions
                 let buttons: [NSWindow.ButtonType] = [.closeButton, .miniaturizeButton, .zoomButton]
                 for buttonType in buttons {
@@ -65,6 +91,10 @@ struct WindowAccessor: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {}
+
+    private static func saveFrame(_ frame: NSRect) {
+        UserDefaults.standard.set(NSStringFromRect(frame), forKey: frameKey)
+    }
 }
 
 #Preview {
