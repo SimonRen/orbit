@@ -53,6 +53,8 @@ struct ServiceCardView: View {
             .help("View Logs")
 
             // Enable/disable toggle
+            // Allow toggling ON if service is stopped/failed, even if other checks fail
+            let canToggleOn = !service.isEnabled && (service.status == .stopped || service.status == .failed)
             Toggle("", isOn: Binding(
                 get: { service.isEnabled },
                 set: { onToggle($0) }
@@ -60,7 +62,7 @@ struct ServiceCardView: View {
             .toggleStyle(.switch)
             .controlSize(.mini)
             .labelsHidden()
-            .disabled(isToggleDisabled || isEnvironmentTransitioning || service.status.isTransitioning)
+            .disabled(!canToggleOn && (isToggleDisabled || isEnvironmentTransitioning || service.status.isTransitioning))
 
             // Context menu button
             Menu {
