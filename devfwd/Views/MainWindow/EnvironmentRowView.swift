@@ -20,10 +20,21 @@ struct EnvironmentRowView: View {
                     .frame(width: 20)
             }
 
-            // Environment name
-            Text(environment.name)
-                .lineLimit(1)
-                .truncationMode(.tail)
+            // Environment name and interfaces
+            VStack(alignment: .leading, spacing: 2) {
+                Text(environment.name)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+
+                // Interface IPs
+                if !environment.interfaces.isEmpty {
+                    Text(environment.interfaces.joined(separator: ", "))
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+            }
 
             Spacer()
 
@@ -58,7 +69,10 @@ struct EnvironmentRowView: View {
 
         EnvironmentRowView(
             environment: {
-                var env = DevEnvironment(name: "Staging-2")
+                var env = DevEnvironment(
+                    name: "Staging-2",
+                    interfaces: ["127.0.0.2", "127.0.0.3"]
+                )
                 env.isEnabled = true
                 return env
             }(),

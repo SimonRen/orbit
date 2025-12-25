@@ -9,11 +9,14 @@ struct DetailView: View {
     @State private var editedInterfaces: [String] = []
     @State private var hasUnsavedChanges: Bool = false
     @State private var isEditingName: Bool = false
+    @FocusState private var focusedInterfaceIndex: Int?
 
     @State private var showingAddServiceSheet = false
     @State private var editingService: Service?
     @State private var showingDeleteConfirmation = false
     @State private var showingSaveBeforeEnablePrompt = false
+    @State private var showingUnsavedChangesOnSwitch = false
+    @State private var previousEnvironmentId: UUID?
     @State private var previousIsEnabled: Bool = false
     @State private var showingCannotDeleteEnvAlert = false
     @State private var showingCannotDeleteServiceAlert = false
@@ -59,13 +62,23 @@ struct DetailView: View {
                 }
                 .onAppear {
                     loadEnvironmentData(env)
+                    previousEnvironmentId = environmentId
                 }
-                .onChange(of: environmentId) { _ in
+                .onChange(of: environmentId) { newId in
+                    // Check if there are unsaved changes before switching
+                    if hasUnsavedChanges && previousEnvironmentId != nil {
+                        // Show prompt and revert selection temporarily
+                        showingUnsavedChangesOnSwitch = true
+                        return
+                    }
+
+                    // No unsaved changes, proceed with switch
                     if let newEnv = environment {
                         loadEnvironmentData(newEnv)
                         previousIsEnabled = newEnv.isEnabled
                         isEditingName = false
                     }
+                    previousEnvironmentId = newId
                 }
                 .onChange(of: env.isEnabled) { newValue in
                     // Detect enabling with unsaved changes
@@ -94,6 +107,41 @@ struct DetailView: View {
                     Button("Cancel", role: .cancel) {}
                 } message: {
                     Text("You have unsaved changes. Would you like to save them before enabling this environment?")
+                }
+                .alert("Unsaved Changes", isPresented: $showingUnsavedChangesOnSwitch) {
+                    Button("Save") {
+                        // Save to the previous environment (not the new one)
+                        if let prevId = previousEnvironmentId,
+                           var prevEnv = appState.environments.first(where: { $0.id == prevId }) {
+                            prevEnv.name = editedName
+                            prevEnv.interfaces = editedInterfaces
+                            appState.updateEnvironment(prevEnv)
+                        }
+                        // Now proceed with the switch to new environment
+                        if let newEnv = environment {
+                            loadEnvironmentData(newEnv)
+                            previousIsEnabled = newEnv.isEnabled
+                            isEditingName = false
+                        }
+                        previousEnvironmentId = environmentId
+                    }
+                    Button("Discard", role: .destructive) {
+                        // Discard changes and proceed with switch
+                        if let newEnv = environment {
+                            loadEnvironmentData(newEnv)
+                            previousIsEnabled = newEnv.isEnabled
+                            isEditingName = false
+                        }
+                        previousEnvironmentId = environmentId
+                    }
+                    Button("Cancel", role: .cancel) {
+                        // Revert to previous environment
+                        if let prevId = previousEnvironmentId {
+                            appState.selectedEnvironmentId = prevId
+                        }
+                    }
+                } message: {
+                    Text("You have unsaved changes. Would you like to save them before switching?")
                 }
                 .sheet(isPresented: $showingAddServiceSheet) {
                     AddServiceSheet(
@@ -260,7 +308,8 @@ struct DetailView: View {
                         onRemove: {
                             editedInterfaces.remove(at: index)
                             checkForChanges()
-                        }
+                        },
+                        isFocused: $focusedInterfaceIndex
                     )
 
                     if index < editedInterfaces.count - 1 {
@@ -429,6 +478,7 @@ struct InterfaceRowCompact: View {
     let isDisabled: Bool
     let canRemove: Bool
     let onRemove: () -> Void
+    let isFocused: FocusState<Int?>.Binding
 
     private var variableName: String {
         index == 0 ? "$IP" : "$IP\(index + 1)"
@@ -444,6 +494,7 @@ struct InterfaceRowCompact: View {
             TextField("127.0.0.x", text: $ipAddress)
                 .textFieldStyle(.plain)
                 .disabled(isDisabled)
+                .focused(isFocused, equals: index)
 
             Spacer()
 
