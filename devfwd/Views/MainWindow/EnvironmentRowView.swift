@@ -9,13 +9,13 @@ struct EnvironmentRowView: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            // Folder icon (animate when transitioning)
+            // Environment icon (animate when transitioning)
             if environment.isTransitioning {
                 ProgressView()
                     .scaleEffect(0.5)
                     .frame(width: 20, height: 16)
             } else {
-                Image(systemName: environment.isEnabled ? "folder.fill" : "folder")
+                Image(systemName: environment.isEnabled ? "cube.fill" : "cube")
                     .foregroundColor(environment.isEnabled ? .accentColor : .secondary)
                     .frame(width: 20)
             }

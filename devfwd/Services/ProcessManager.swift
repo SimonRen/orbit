@@ -7,6 +7,9 @@ final class ProcessManager {
     /// Active processes keyed by service ID
     private var processes: [UUID: Process] = [:]
 
+    /// Process group IDs for reliable cleanup (PGID == PID when we create new group)
+    private var processGroups: [UUID: pid_t] = [:]
+
     /// Pipes for capturing output, keyed by service ID
     private var pipes: [UUID: (stdout: Pipe, stderr: Pipe)] = [:]
 
@@ -42,8 +45,27 @@ final class ProcessManager {
 
         // Resolve variables in command
         let resolvedCommand = VariableResolver.resolve(service.command, interfaces: interfaces)
-        // The command is run directly; we'll track the PID and kill the process tree
-        process.arguments = ["-c", resolvedCommand]
+
+        // Get our app's PID for orphan detection
+        let appPid = ProcessInfo.processInfo.processIdentifier
+
+        // Wrap command with:
+        // 1. trap to kill process group on exit (handles graceful termination)
+        // 2. background monitor that watches parent PID and kills group if parent dies (handles force-quit/crash)
+        // Note: We use 'kill 0' which sends signal to entire process group
+        // The monitor polls every 0.5s for faster cleanup on parent death
+        // We escape single quotes in the command to prevent bash injection
+        let escapedCommand = resolvedCommand.replacingOccurrences(of: "'", with: "'\\''")
+        let wrappedCommand = """
+        trap 'kill 0 2>/dev/null' EXIT TERM INT HUP
+        (while kill -0 \(appPid) 2>/dev/null; do sleep 0.5; done; kill 0 2>/dev/null) &
+        _MONITOR_PID=$!
+        eval '\(escapedCommand)'
+        _EXIT_CODE=$?
+        kill $_MONITOR_PID 2>/dev/null
+        exit $_EXIT_CODE
+        """
+        process.arguments = ["-c", wrappedCommand]
         process.currentDirectoryURL = FileManager.default.homeDirectoryForCurrentUser
 
         // Setup environment
@@ -92,12 +114,20 @@ final class ProcessManager {
 
         do {
             try process.run()
+
+            let pid = process.processIdentifier
+
+            // Put process in its own process group for reliable cleanup
+            // setpgid(pid, pid) creates a new process group with PGID == PID
+            setpgid(pid, pid)
+            processGroups[service.id] = pid
+
             processes[service.id] = process
             pipes[service.id] = (stdoutPipe, stderrPipe)
 
             // Log the startup
             let startEntry = LogEntry(
-                message: "Starting: \(resolvedCommand)",
+                message: "Starting: \(resolvedCommand) (PID: \(pid))",
                 stream: .stdout
             )
             onLogOutput?(service.id, startEntry)
@@ -127,6 +157,7 @@ final class ProcessManager {
         }
 
         let pid = process.processIdentifier
+        let pgid = processGroups[serviceId] ?? pid
 
         guard process.isRunning else {
             cleanup(serviceId: serviceId)
@@ -138,20 +169,16 @@ final class ProcessManager {
 
         // Log the stop attempt
         let stopEntry = LogEntry(
-            message: "Stopping process (PID: \(pid))...",
+            message: "Stopping process group (PGID: \(pgid))...",
             stream: .stdout
         )
         onLogOutput?(serviceId, stopEntry)
 
-        // Get all child processes before killing the parent
-        let childPids = getChildProcesses(of: pid)
+        // Kill entire process group with SIGTERM (negative PID kills the group)
+        // This is more reliable than killing individual processes
+        killpg(pgid, SIGTERM)
 
-        // Send SIGTERM to all child processes first
-        for childPid in childPids {
-            kill(childPid, SIGTERM)
-        }
-
-        // Also terminate the main process
+        // Also terminate the main process directly (belt and suspenders)
         process.terminate()
 
         // Wait for graceful shutdown, then force kill
@@ -159,19 +186,16 @@ final class ProcessManager {
             self?.lock.lock()
             defer { self?.lock.unlock() }
 
-            // Force kill any remaining child processes
-            for childPid in childPids {
-                kill(childPid, SIGKILL)
-            }
-
             if process.isRunning {
                 // Log forced kill
                 let killEntry = LogEntry(
-                    message: "Force killing process (timeout exceeded)",
+                    message: "Force killing process group (timeout exceeded)",
                     stream: .stderr
                 )
                 self?.onLogOutput?(serviceId, killEntry)
 
+                // Force kill entire process group
+                killpg(pgid, SIGKILL)
                 kill(pid, SIGKILL)
             }
 
@@ -275,6 +299,7 @@ final class ProcessManager {
 
     private func cleanup(serviceId: UUID) {
         processes.removeValue(forKey: serviceId)
+        processGroups.removeValue(forKey: serviceId)
         pipes.removeValue(forKey: serviceId)
     }
 }
