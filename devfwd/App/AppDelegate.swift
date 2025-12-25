@@ -297,10 +297,28 @@ struct EnvironmentMenuRow: View {
     let onToggle: () -> Void
     @State private var isHovered = false
 
+    private var textColor: Color {
+        if isHovered {
+            return .white
+        } else if environment.isTransitioning {
+            return .secondary
+        } else if environment.isEnabled {
+            return .primary  // Bright for enabled
+        } else {
+            return .secondary  // Gray for disabled
+        }
+    }
+
     var body: some View {
         HStack {
+            // Status indicator dot
+            Circle()
+                .fill(environment.isEnabled ? Color.green : Color.gray.opacity(0.5))
+                .frame(width: 6, height: 6)
+
             Text(environment.name)
-                .foregroundColor(isHovered ? .white : (environment.isTransitioning ? .secondary : .primary))
+                .foregroundColor(textColor)
+                .fontWeight(environment.isEnabled ? .medium : .regular)
 
             Spacer()
 

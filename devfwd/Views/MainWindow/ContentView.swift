@@ -15,6 +15,7 @@ struct ContentView: View {
             // Detail view
             if let selectedId = appState.selectedEnvironmentId {
                 DetailView(environmentId: selectedId)
+                    .id(selectedId)  // Force view recreation when selection changes
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 EmptyDetailView()

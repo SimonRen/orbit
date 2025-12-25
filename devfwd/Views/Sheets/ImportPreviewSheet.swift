@@ -95,29 +95,37 @@ struct ImportPreviewSheet: View {
 
                 // Services
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Services")
-                        .font(.headline)
+                    HStack {
+                        Text("Services")
+                            .font(.headline)
+                        Text("(\(preview.services.count))")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
 
-                    VStack(spacing: 0) {
-                        ForEach(Array(preview.services.enumerated()), id: \.offset) { index, service in
-                            serviceRow(service: service)
+                    ScrollView {
+                        VStack(spacing: 0) {
+                            ForEach(Array(preview.services.enumerated()), id: \.offset) { index, service in
+                                serviceRow(service: service)
 
-                            if index < preview.services.count - 1 {
-                                Divider()
-                                    .padding(.leading, 50)
+                                if index < preview.services.count - 1 {
+                                    Divider()
+                                        .padding(.leading, 50)
+                                }
                             }
-                        }
 
-                        if preview.services.isEmpty {
-                            HStack {
-                                Image(systemName: "tray")
-                                    .foregroundColor(.secondary)
-                                Text("No services configured")
-                                    .foregroundColor(.secondary)
+                            if preview.services.isEmpty {
+                                HStack {
+                                    Image(systemName: "tray")
+                                        .foregroundColor(.secondary)
+                                    Text("No services configured")
+                                        .foregroundColor(.secondary)
+                                }
+                                .padding(12)
                             }
-                            .padding(12)
                         }
                     }
+                    .frame(maxHeight: 250)
                     .background(
                         RoundedRectangle(cornerRadius: 8)
                             .fill(Color(nsColor: .controlBackgroundColor))
@@ -128,8 +136,6 @@ struct ImportPreviewSheet: View {
                     )
                 }
             }
-
-            Spacer()
 
             // Footer buttons
             HStack {
@@ -155,7 +161,7 @@ struct ImportPreviewSheet: View {
             .padding(.top, 20)
         }
         .padding(24)
-        .frame(width: 500, height: 550)
+        .frame(width: 500)
         .onAppear {
             editedName = preview.suggestedName
         }
