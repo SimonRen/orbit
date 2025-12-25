@@ -11,39 +11,42 @@ This project uses XcodeGen to generate the Xcode project from `project.yml`:
 xcodegen generate
 
 # Build the app
-xcodebuild -project devfwd.xcodeproj -scheme devfwd -configuration Debug build
+xcodebuild -project orbit.xcodeproj -scheme orbit -configuration Debug build
 
 # Run tests
-xcodebuild -project devfwd.xcodeproj -scheme devfwd test
+xcodebuild -project orbit.xcodeproj -scheme orbit test
 
 # Relaunch app after build
-pkill -f "devfwd.app"; open ~/Library/Developer/Xcode/DerivedData/devfwd-*/Build/Products/Debug/devfwd.app
+pkill -f "Orbit.app"; open ~/Library/Developer/Xcode/DerivedData/orbit-*/Build/Products/Debug/Orbit.app
 ```
 
 The generated `*.xcodeproj` is gitignored - always regenerate with `xcodegen generate`.
 
 ## Architecture Overview
 
-DEV Fwd is a macOS SwiftUI app for managing development environment port forwarding. It allows users to:
+Orbit is a macOS SwiftUI app for managing development environment port forwarding. It allows users to:
 - Define environments with loopback interface aliases (127.0.x.x)
 - Configure services that run commands with variable substitution ($IP, $IP2, etc.)
 - Toggle environments on/off from both the main window and menubar
 
 ### Key Components
 
-**Privileged Helper (`devfwdHelper/`)**: A separate XPC service that runs as root to manage network interface aliases without repeated password prompts. Installed via SMJobBless on first use.
+**Privileged Helper (`orbitHelper/`)**: A separate XPC service that runs as root to manage network interface aliases without repeated password prompts. Installed via SMJobBless on first use.
 
 **AppState (`ViewModels/AppState.swift`)**: Central ObservableObject holding all application state. Manages:
 - Environment/service CRUD operations
 - Activation/deactivation with transition state tracking
 - Toggle cooldown (500ms) to prevent rapid clicks
 - Process lifecycle coordination
+- Import/export of environment configurations
 
 **ProcessManager (`Services/ProcessManager.swift`)**: Spawns and monitors service processes. Key behavior:
 - Kills entire process tree on stop (not just parent bash)
 - Uses `pgrep -P` to find child processes recursively
 
 **NetworkManager (`Services/NetworkManager.swift`)**: Communicates with the privileged helper via XPC to add/remove interface aliases.
+
+**WindowCoordinator (`App/OrbitApp.swift`)**: Singleton for cross-window communication. Provides closures to open main window, log windows, and trigger import dialogs from anywhere (e.g., menubar).
 
 ### Data Flow
 
@@ -60,6 +63,10 @@ Commands use `$IP`, `$IP2`, `$IP3` etc. which resolve to the environment's inter
 - `interfaces[1]` → `$IP2`
 - `interfaces[n]` → `$IP{n+1}`
 
+### Import/Export
+
+Environments can be exported to `.orbit.json` files and imported back. Export includes environment name, interfaces, and services. Import auto-detects name/IP conflicts and suggests resolutions.
+
 ### Configuration
 
-Persisted to `~/Library/Application Support/DEV Fwd/config.json`. Runtime state (isEnabled, isTransitioning, service status, logs) is not persisted.
+Persisted to `~/Library/Application Support/Orbit/config.json`. Runtime state (isEnabled, isTransitioning, service status, logs) is not persisted.
