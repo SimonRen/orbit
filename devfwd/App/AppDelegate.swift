@@ -28,7 +28,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         setupStatusItem()
         setupPopover()
         observeStateChanges()
-        setupEventMonitor()
         setupWindowObservation()
     }
 
@@ -101,10 +100,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         popover?.contentViewController = NSHostingController(rootView: contentView)
     }
 
-    private func setupEventMonitor() {
-        // Close popover when clicking outside
+    private func addEventMonitor() {
+        guard eventMonitor == nil else { return }
         eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
             self?.closePopover()
+        }
+    }
+
+    private func removeEventMonitor() {
+        if let monitor = eventMonitor {
+            NSEvent.removeMonitor(monitor)
+            eventMonitor = nil
         }
     }
 
@@ -189,6 +195,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             popoverWindow.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
             popoverWindow.level = .popUpMenu
         }
+
+        // Start monitoring for outside clicks
+        addEventMonitor()
     }
 
     private func closePopover() {
@@ -198,7 +207,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     // MARK: - NSPopoverDelegate
 
     nonisolated func popoverDidClose(_ notification: Notification) {
-        // Popover closed
+        Task { @MainActor in
+            removeEventMonitor()
+        }
     }
 
     // MARK: - Actions

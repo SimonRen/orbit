@@ -13,6 +13,12 @@ struct LogEntry: Identifiable, Equatable {
     let message: String
     let stream: LogStream
 
+    private static let timestampFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm:ss"
+        return formatter
+    }()
+
     init(id: UUID = UUID(), timestamp: Date = Date(), message: String, stream: LogStream) {
         self.id = id
         self.timestamp = timestamp
@@ -22,8 +28,6 @@ struct LogEntry: Identifiable, Equatable {
 
     /// Formatted timestamp string for display
     var formattedTimestamp: String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm:ss"
-        return "[\(formatter.string(from: timestamp))]"
+        "[\(Self.timestampFormatter.string(from: timestamp))]"
     }
 }

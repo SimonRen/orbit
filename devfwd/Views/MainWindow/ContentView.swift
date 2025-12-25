@@ -70,14 +70,14 @@ struct WindowAccessor: NSViewRepresentable {
                     object: window,
                     queue: .main
                 ) { _ in
-                    Self.saveFrame(window.frame)
+                    context.coordinator.scheduleFrameSave(window.frame)
                 }
                 context.coordinator.moveObserver = NotificationCenter.default.addObserver(
                     forName: NSWindow.didMoveNotification,
                     object: window,
                     queue: .main
                 ) { _ in
-                    Self.saveFrame(window.frame)
+                    context.coordinator.scheduleFrameSave(window.frame)
                 }
 
                 // Adjust traffic light button positions
@@ -97,15 +97,21 @@ struct WindowAccessor: NSViewRepresentable {
 
     func updateNSView(_ nsView: NSView, context: Context) {}
 
-    private static func saveFrame(_ frame: NSRect) {
-        UserDefaults.standard.set(NSStringFromRect(frame), forKey: frameKey)
-    }
-
     class Coordinator {
         var resizeObserver: NSObjectProtocol?
         var moveObserver: NSObjectProtocol?
+        private var saveWorkItem: DispatchWorkItem?
+
+        func scheduleFrameSave(_ frame: NSRect) {
+            saveWorkItem?.cancel()
+            saveWorkItem = DispatchWorkItem {
+                UserDefaults.standard.set(NSStringFromRect(frame), forKey: WindowAccessor.frameKey)
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: saveWorkItem!)
+        }
 
         deinit {
+            saveWorkItem?.cancel()
             if let observer = resizeObserver {
                 NotificationCenter.default.removeObserver(observer)
             }

@@ -174,7 +174,8 @@ final class HelperClient: ObservableObject {
 
         completion(proxy)
 
-        // Store connection to keep it alive
+        // Invalidate old connection before storing new one
+        self.connection?.invalidate()
         self.connection = connection
     }
 }
