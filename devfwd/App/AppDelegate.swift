@@ -215,7 +215,7 @@ struct StatusMenuView: View {
                 .padding(.vertical, 6)
 
             // Show Window button
-            Button(action: {
+            MenuRowButton(label: "Show Window") {
                 onDismiss()
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                     NSApp.activate(ignoringOtherApps: true)
@@ -225,32 +225,16 @@ struct StatusMenuView: View {
                         WindowCoordinator.shared.openMainWindow?()
                     }
                 }
-            }) {
-                Text("Show Window")
-                    .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .buttonStyle(.plain)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
 
             Divider()
                 .padding(.vertical, 6)
 
             // Quit button
-            Button(action: {
+            MenuRowButton(label: "Quit DEV Fwd", shortcut: "⌘Q") {
                 onDismiss()
                 NSApp.terminate(nil)
-            }) {
-                HStack {
-                    Text("Quit DEV Fwd")
-                    Spacer()
-                    Text("⌘Q")
-                        .foregroundColor(.secondary)
-                }
             }
-            .buttonStyle(.plain)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
             .padding(.bottom, 4)
         }
         .frame(width: 200)
@@ -260,11 +244,12 @@ struct StatusMenuView: View {
 struct EnvironmentMenuRow: View {
     let environment: DevEnvironment
     let onToggle: () -> Void
+    @State private var isHovered = false
 
     var body: some View {
         HStack {
             Text(environment.name)
-                .foregroundColor(environment.isTransitioning ? .secondary : .primary)
+                .foregroundColor(isHovered ? .white : (environment.isTransitioning ? .secondary : .primary))
 
             Spacer()
 
@@ -283,6 +268,47 @@ struct EnvironmentMenuRow: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 4)
+        .background(
+            RoundedRectangle(cornerRadius: 4)
+                .fill(isHovered ? Color.accentColor : Color.clear)
+        )
+        .padding(.horizontal, 4)
         .contentShape(Rectangle())
+        .onHover { hovering in
+            isHovered = hovering
+        }
+    }
+}
+
+/// Reusable menu row button with hover state
+struct MenuRowButton: View {
+    let label: String
+    var shortcut: String? = nil
+    let action: () -> Void
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack {
+                Text(label)
+                    .foregroundColor(isHovered ? .white : .primary)
+                Spacer()
+                if let shortcut = shortcut {
+                    Text(shortcut)
+                        .foregroundColor(isHovered ? .white.opacity(0.8) : .secondary)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(isHovered ? Color.accentColor : Color.clear)
+            )
+            .padding(.horizontal, 4)
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            isHovered = hovering
+        }
     }
 }
