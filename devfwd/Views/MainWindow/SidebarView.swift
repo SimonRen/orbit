@@ -15,14 +15,16 @@ struct SidebarView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Header (with space for traffic lights)
+            // Header (with space for traffic lights) - draggable
             Text("ENVIRONMENTS")
                 .font(.caption)
                 .fontWeight(.semibold)
                 .foregroundColor(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 16)
                 .padding(.top, 8)
                 .padding(.bottom, 8)
+                .background(WindowDragArea())
 
             // Environment list
             ScrollView {

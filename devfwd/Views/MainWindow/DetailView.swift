@@ -270,6 +270,7 @@ struct DetailView: View {
         .padding(.horizontal, 20)
         .padding(.top, -10)
         .padding(.bottom, 14)
+        .background(WindowDragArea())
     }
 
     // MARK: - Interfaces Card
