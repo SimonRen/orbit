@@ -1,4 +1,4 @@
-# DEV Fwd
+# Orbit
 
 A macOS application for managing development environment port forwarding with loopback interface aliases.
 
@@ -6,7 +6,7 @@ A macOS application for managing development environment port forwarding with lo
 
 ## Overview
 
-DEV Fwd simplifies local development by allowing you to run multiple services on the same ports using different loopback IP addresses (127.0.x.x). This is particularly useful when:
+Orbit simplifies local development by allowing you to run multiple services on the same ports using different loopback IP addresses (127.0.x.x). This is particularly useful when:
 
 - Running multiple microservices locally that all want port 8080
 - Port-forwarding Kubernetes services to predictable local addresses
@@ -51,8 +51,8 @@ DEV Fwd simplifies local development by allowing you to run multiple services on
 
 ```bash
 # Clone the repository
-git clone https://github.com/SimonRen/devfwd.git
-cd devfwd
+git clone https://github.com/SimonRen/orbit.git
+cd orbit
 
 # Install XcodeGen if needed
 brew install xcodegen
@@ -61,10 +61,10 @@ brew install xcodegen
 xcodegen generate
 
 # Build
-xcodebuild -project devfwd.xcodeproj -scheme devfwd -configuration Release build
+xcodebuild -project orbit.xcodeproj -scheme orbit -configuration Release build
 
 # The built app is at:
-# ~/Library/Developer/Xcode/DerivedData/devfwd-*/Build/Products/Release/devfwd.app
+# ~/Library/Developer/Xcode/DerivedData/orbit-*/Build/Products/Release/Orbit.app
 ```
 
 ## Usage
@@ -110,7 +110,7 @@ Toggle the switch next to an environment in the sidebar or menubar. On first act
 
 Configuration is stored at:
 ```
-~/Library/Application Support/DEV Fwd/config.json
+~/Library/Application Support/Orbit/config.json
 ```
 
 Runtime state (enabled status, service status, logs) is not persisted between app launches.
@@ -129,10 +129,10 @@ Runtime state (enabled status, service status, logs) is not persisted between ap
 xcodegen generate
 
 # Build debug
-xcodebuild -project devfwd.xcodeproj -scheme devfwd -configuration Debug build
+xcodebuild -project orbit.xcodeproj -scheme orbit -configuration Debug build
 
 # Run tests
-xcodebuild -project devfwd.xcodeproj -scheme devfwd test
+xcodebuild -project orbit.xcodeproj -scheme orbit test
 ```
 
 ## License

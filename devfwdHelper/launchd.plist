@@ -3,10 +3,10 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.devfwd.helper</string>
+    <string>com.orbit.helper</string>
     <key>MachServices</key>
     <dict>
-        <key>com.devfwd.helper</key>
+        <key>com.orbit.helper</key>
         <true/>
     </dict>
 </dict>

@@ -1,6 +1,6 @@
-name: devfwd
+name: orbit
 options:
-  bundleIdPrefix: com.devfwd
+  bundleIdPrefix: com.orbit
   deploymentTarget:
     macOS: "13.0"
   createIntermediateGroups: true
@@ -16,7 +16,7 @@ settings:
     SWIFT_VERSION: "5.9"
 
 targets:
-  devfwd:
+  orbit:
     type: application
     platform: macOS
     sources:
@@ -28,10 +28,10 @@ targets:
       - name: Copy LaunchDaemons
         script: |
           mkdir -p "${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Library/LaunchDaemons"
-          cp "${SRCROOT}/devfwd/Resources/LaunchDaemons/com.devfwd.helper.plist" "${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Library/LaunchDaemons/"
+          cp "${SRCROOT}/devfwd/Resources/LaunchDaemons/com.orbit.helper.plist" "${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Library/LaunchDaemons/"
         basedOnDependencyAnalysis: false
     dependencies:
-      - target: com.devfwd.helper
+      - target: com.orbit.helper
         embed: true
         codeSign: true
         copy:
@@ -39,18 +39,19 @@ targets:
           subpath: "Contents/Library/LaunchServices"
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.devfwd.app
-        PRODUCT_NAME: devfwd
+        PRODUCT_BUNDLE_IDENTIFIER: com.orbit.app
+        PRODUCT_NAME: Orbit
         INFOPLIST_FILE: devfwd/Resources/Info.plist
         GENERATE_INFOPLIST_FILE: NO
         ENABLE_HARDENED_RUNTIME: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     entitlements:
       path: devfwd/Resources/devfwd.entitlements
       properties:
         com.apple.security.app-sandbox: false
         com.apple.security.automation.apple-events: true
 
-  com.devfwd.helper:
+  com.orbit.helper:
     type: tool
     platform: macOS
     sources:
@@ -60,8 +61,8 @@ targets:
           - "launchd.plist"
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.devfwd.helper
-        PRODUCT_NAME: com.devfwd.helper
+        PRODUCT_BUNDLE_IDENTIFIER: com.orbit.helper
+        PRODUCT_NAME: com.orbit.helper
         SKIP_INSTALL: YES
         ENABLE_HARDENED_RUNTIME: YES
         CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO
@@ -69,33 +70,33 @@ targets:
         CREATE_INFOPLIST_SECTION_IN_BINARY: YES
         OTHER_LDFLAGS: "-sectcreate __TEXT __launchd_plist $(SRCROOT)/devfwdHelper/launchd.plist"
 
-  devfwdTests:
+  orbitTests:
     type: bundle.unit-test
     platform: macOS
     sources:
       - path: devfwdTests
     dependencies:
-      - target: devfwd
+      - target: orbit
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.devfwd.app.tests
+        PRODUCT_BUNDLE_IDENTIFIER: com.orbit.app.tests
         GENERATE_INFOPLIST_FILE: YES
         CODE_SIGN_STYLE: Automatic
         CODE_SIGN_IDENTITY: "-"
 
 schemes:
-  devfwd:
+  orbit:
     build:
       targets:
-        devfwd: all
-        com.devfwd.helper: all
-        devfwdTests: [test]
+        orbit: all
+        com.orbit.helper: all
+        orbitTests: [test]
     run:
       config: Debug
     test:
       config: Debug
       targets:
-        - devfwdTests
+        - orbitTests
     profile:
       config: Release
     analyze:
