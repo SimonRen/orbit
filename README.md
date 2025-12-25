@@ -133,7 +133,56 @@ xcodebuild -project orbit.xcodeproj -scheme orbit -configuration Debug build
 
 # Run tests
 xcodebuild -project orbit.xcodeproj -scheme orbit test
+
+# Relaunch after build
+pkill -f "Orbit.app"; open ~/Library/Developer/Xcode/DerivedData/orbit-*/Build/Products/Debug/Orbit.app
 ```
+
+## Release Process
+
+### Building a Release
+
+```bash
+# 1. Ensure clean working directory
+git status
+
+# 2. Build release configuration
+xcodebuild -project orbit.xcodeproj -scheme orbit -configuration Release clean build
+
+# 3. The release app is at:
+ls ~/Library/Developer/Xcode/DerivedData/orbit-*/Build/Products/Release/Orbit.app
+
+# 4. (Optional) Copy to Desktop for distribution
+cp -R ~/Library/Developer/Xcode/DerivedData/orbit-*/Build/Products/Release/Orbit.app ~/Desktop/
+```
+
+### Tagging a Release
+
+```bash
+# Create annotated tag
+git tag -a v0.x.x -m "Release v0.x.x - Description"
+
+# Push tag to remote
+git push origin v0.x.x
+```
+
+### Version History
+
+| Version | Date | Highlights |
+|---------|------|------------|
+| v0.2.3 | 2025-12-25 | Icon fixes, performance improvements |
+| v0.2 | 2025-12-25 | Import/export, UI improvements, robustness fixes |
+| v0.1 | 2025-12-24 | Initial release |
+
+## Import/Export
+
+Environments can be exported to `.orbit.json` files and shared with team members.
+
+**Export:** Right-click an environment → Export
+
+**Import:** Click "Import..." button or use File → Import (⌘I)
+
+See [docs/export-format.md](docs/export-format.md) for file format specification.
 
 ## License
 
