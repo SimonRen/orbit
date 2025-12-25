@@ -1,5 +1,11 @@
 import SwiftUI
 
+/// Filter options for services list
+enum ServiceFilter: String, CaseIterable {
+    case all = "All"
+    case enabled = "Enabled"
+}
+
 /// Detail view showing the selected environment's configuration
 struct DetailView: View {
     @EnvironmentObject var appState: AppState
@@ -21,6 +27,8 @@ struct DetailView: View {
     @State private var showingCannotDeleteEnvAlert = false
     @State private var showingCannotDeleteServiceAlert = false
     @State private var serviceToDelete: Service?
+    @State private var activeInterfaces: Set<String> = []
+    @State private var serviceFilter: ServiceFilter = .all
 
     private var environment: DevEnvironment? {
         appState.environments.first { $0.id == environmentId }
@@ -54,10 +62,14 @@ struct DetailView: View {
                         }
                         .padding(20)
                     }
+                    .scrollIndicators(.never) // Hide scrollbar to prevent layout shift
                 }
                 .onAppear {
                     loadEnvironmentData(env)
                     previousEnvironmentId = environmentId
+                    if env.isEnabled {
+                        refreshInterfaceStatus()
+                    }
                 }
                 .onChange(of: environmentId) { newId in
                     // Check if there are unsaved changes before switching
@@ -83,6 +95,16 @@ struct DetailView: View {
                         showingSaveBeforeEnablePrompt = true
                     }
                     previousIsEnabled = newValue
+
+                    // Refresh interface status when enabled/disabled
+                    if newValue {
+                        // Delay slightly to allow interfaces to come up
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                            refreshInterfaceStatus()
+                        }
+                    } else {
+                        activeInterfaces = []
+                    }
                 }
                 .alert("Unsaved Changes", isPresented: $showingSaveBeforeEnablePrompt) {
                     Button("Save & Enable") {
@@ -306,7 +328,8 @@ struct DetailView: View {
                             editedInterfaces.remove(at: index)
                             checkForChanges()
                         },
-                        isFocused: $focusedInterfaceIndex
+                        isFocused: $focusedInterfaceIndex,
+                        isUp: activeInterfaces.contains(ip)
                     )
 
                     if index < editedInterfaces.count - 1 {
@@ -351,8 +374,17 @@ struct DetailView: View {
     // MARK: - Services Section
 
     private func servicesSection(env: DevEnvironment) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // Section header
+        let filteredServices: [Service] = {
+            switch serviceFilter {
+            case .all:
+                return env.services
+            case .enabled:
+                return env.services.filter { $0.isEnabled }
+            }
+        }()
+
+        return VStack(alignment: .leading, spacing: 12) {
+            // Section header with filter
             HStack {
                 Image(systemName: "server.rack")
                     .foregroundColor(.secondary)
@@ -360,10 +392,21 @@ struct DetailView: View {
                     .font(.caption)
                     .fontWeight(.semibold)
                     .foregroundColor(.secondary)
+
+                Spacer()
+
+                // Filter picker
+                Picker("", selection: $serviceFilter) {
+                    ForEach(ServiceFilter.allCases, id: \.self) { filter in
+                        Text(filter.rawValue).tag(filter)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 120)
             }
 
             ServiceListView(
-                services: env.services,
+                services: filteredServices,
                 isEnvironmentActive: isActive,
                 isEnvironmentTransitioning: env.isTransitioning,
                 onToggle: { serviceId, _ in
@@ -433,6 +476,17 @@ struct DetailView: View {
 
         return "127.0.1.1"
     }
+
+    private func refreshInterfaceStatus() {
+        let networkManager = NetworkManager.shared
+        var active: Set<String> = []
+        for ip in editedInterfaces {
+            if networkManager.isInterfaceActive(ip) {
+                active.insert(ip)
+            }
+        }
+        activeInterfaces = active
+    }
 }
 
 /// Compact interface row for the new card layout
@@ -443,6 +497,7 @@ struct InterfaceRowCompact: View {
     let canRemove: Bool
     let onRemove: () -> Void
     let isFocused: FocusState<Int?>.Binding
+    var isUp: Bool = false
 
     private var variableName: String {
         index == 0 ? "$IP" : "$IP\(index + 1)"
@@ -450,6 +505,18 @@ struct InterfaceRowCompact: View {
 
     var body: some View {
         HStack(spacing: 12) {
+            // UP indicator
+            if isUp {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundColor(.green)
+                    .imageScale(.small)
+                    .help("Interface is active on lo0")
+            } else {
+                Circle()
+                    .fill(Color.clear)
+                    .frame(width: 13, height: 13)
+            }
+
             Text(variableName)
                 .font(.system(.body, design: .monospaced))
                 .foregroundColor(.secondary)
