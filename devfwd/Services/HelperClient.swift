@@ -1,0 +1,180 @@
+import Foundation
+import ServiceManagement
+
+/// Error types for helper operations
+enum HelperClientError: LocalizedError {
+    case helperNotInstalled
+    case connectionFailed
+    case operationFailed(String)
+    case installationFailed(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .helperNotInstalled:
+            return "Privileged helper not installed. Please install it first."
+        case .connectionFailed:
+            return "Failed to connect to privileged helper."
+        case .operationFailed(let reason):
+            return "Operation failed: \(reason)"
+        case .installationFailed(let reason):
+            return "Helper installation failed: \(reason)"
+        }
+    }
+}
+
+/// Client for communicating with the privileged helper tool
+@MainActor
+final class HelperClient: ObservableObject {
+    static let shared = HelperClient()
+
+    @Published private(set) var isHelperInstalled = false
+
+    private var connection: NSXPCConnection?
+
+    private init() {
+        checkHelperStatus()
+    }
+
+    // MARK: - Installation
+
+    /// Check if helper is installed and running
+    func checkHelperStatus() {
+        // Try to connect and get version
+        getHelperProxy { [weak self] proxy in
+            proxy?.getVersion { version in
+                DispatchQueue.main.async {
+                    self?.isHelperInstalled = true
+                }
+            }
+        } errorHandler: { [weak self] in
+            DispatchQueue.main.async {
+                self?.isHelperInstalled = false
+            }
+        }
+    }
+
+    /// Install the privileged helper tool (requires admin auth once)
+    func installHelper() async throws {
+        // Use SMJobBless - works for development without notarization
+        try installHelperWithSMJobBless()
+    }
+
+    private func installHelperWithSMJobBless() throws {
+        var authRef: AuthorizationRef?
+        var authStatus = AuthorizationCreate(nil, nil, [], &authRef)
+
+        guard authStatus == errAuthorizationSuccess, let auth = authRef else {
+            throw HelperClientError.installationFailed("Failed to create authorization")
+        }
+
+        defer { AuthorizationFree(auth, []) }
+
+        var authItem = AuthorizationItem(
+            name: kSMRightBlessPrivilegedHelper,
+            valueLength: 0,
+            value: nil,
+            flags: 0
+        )
+
+        var authRights = AuthorizationRights(count: 1, items: &authItem)
+
+        let flags: AuthorizationFlags = [.interactionAllowed, .preAuthorize, .extendRights]
+        authStatus = AuthorizationCopyRights(auth, &authRights, nil, flags, nil)
+
+        guard authStatus == errAuthorizationSuccess else {
+            if authStatus == errAuthorizationCanceled {
+                throw HelperClientError.installationFailed("Authorization cancelled")
+            }
+            throw HelperClientError.installationFailed("Authorization failed: \(authStatus)")
+        }
+
+        var error: Unmanaged<CFError>?
+        let success = SMJobBless(
+            kSMDomainSystemLaunchd,
+            "com.devfwd.helper" as CFString,
+            auth,
+            &error
+        )
+
+        if success {
+            isHelperInstalled = true
+        } else {
+            let errorDesc = error?.takeRetainedValue().localizedDescription ?? "Unknown error"
+            throw HelperClientError.installationFailed(errorDesc)
+        }
+    }
+
+    /// Uninstall the privileged helper
+    func uninstallHelper() async throws {
+        if #available(macOS 13.0, *) {
+            let service = SMAppService.daemon(plistName: "com.devfwd.helper.plist")
+            try await service.unregister()
+            isHelperInstalled = false
+        }
+    }
+
+    // MARK: - Interface Operations
+
+    /// Add a loopback interface alias
+    func addInterfaceAlias(_ ip: String) async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            getHelperProxy { proxy in
+                proxy?.addInterfaceAlias(ip) { success, errorMessage in
+                    if success {
+                        continuation.resume()
+                    } else {
+                        continuation.resume(throwing: HelperClientError.operationFailed(errorMessage ?? "Unknown error"))
+                    }
+                }
+            } errorHandler: {
+                continuation.resume(throwing: HelperClientError.connectionFailed)
+            }
+        }
+    }
+
+    /// Remove a loopback interface alias
+    func removeInterfaceAlias(_ ip: String) async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            getHelperProxy { proxy in
+                proxy?.removeInterfaceAlias(ip) { success, errorMessage in
+                    if success {
+                        continuation.resume()
+                    } else {
+                        continuation.resume(throwing: HelperClientError.operationFailed(errorMessage ?? "Unknown error"))
+                    }
+                }
+            } errorHandler: {
+                continuation.resume(throwing: HelperClientError.connectionFailed)
+            }
+        }
+    }
+
+    // MARK: - Private Methods
+
+    private func getHelperProxy(
+        completion: @escaping (HelperProtocol?) -> Void,
+        errorHandler: @escaping () -> Void
+    ) {
+        let connection = NSXPCConnection(machServiceName: HelperConstants.machServiceName, options: .privileged)
+        connection.remoteObjectInterface = NSXPCInterface(with: HelperProtocol.self)
+
+        connection.invalidationHandler = {
+            errorHandler()
+        }
+
+        connection.interruptionHandler = {
+            errorHandler()
+        }
+
+        connection.resume()
+
+        let proxy = connection.remoteObjectProxyWithErrorHandler { _ in
+            errorHandler()
+        } as? HelperProtocol
+
+        completion(proxy)
+
+        // Store connection to keep it alive
+        self.connection = connection
+    }
+}

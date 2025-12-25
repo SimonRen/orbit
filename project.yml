@@ -1,0 +1,104 @@
+name: devfwd
+options:
+  bundleIdPrefix: com.devfwd
+  deploymentTarget:
+    macOS: "13.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: "DN4YAHWP2P"
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "Developer ID Application"
+    SWIFT_VERSION: "5.9"
+
+targets:
+  devfwd:
+    type: application
+    platform: macOS
+    sources:
+      - path: devfwd
+        excludes:
+          - "**/.DS_Store"
+          - "**/LaunchDaemons/**"
+    postBuildScripts:
+      - name: Copy LaunchDaemons
+        script: |
+          mkdir -p "${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Library/LaunchDaemons"
+          cp "${SRCROOT}/devfwd/Resources/LaunchDaemons/com.devfwd.helper.plist" "${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Library/LaunchDaemons/"
+        basedOnDependencyAnalysis: false
+    dependencies:
+      - target: com.devfwd.helper
+        embed: true
+        codeSign: true
+        copy:
+          destination: wrapper
+          subpath: "Contents/Library/LaunchServices"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.devfwd.app
+        PRODUCT_NAME: devfwd
+        INFOPLIST_FILE: devfwd/Resources/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        ENABLE_HARDENED_RUNTIME: YES
+    entitlements:
+      path: devfwd/Resources/devfwd.entitlements
+      properties:
+        com.apple.security.app-sandbox: false
+        com.apple.security.automation.apple-events: true
+
+  com.devfwd.helper:
+    type: tool
+    platform: macOS
+    sources:
+      - path: devfwdHelper
+        excludes:
+          - "**/.DS_Store"
+          - "launchd.plist"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.devfwd.helper
+        PRODUCT_NAME: com.devfwd.helper
+        SKIP_INSTALL: YES
+        ENABLE_HARDENED_RUNTIME: YES
+        CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO
+        INFOPLIST_FILE: devfwdHelper/Info.plist
+        CREATE_INFOPLIST_SECTION_IN_BINARY: YES
+        OTHER_LDFLAGS: "-sectcreate __TEXT __launchd_plist $(SRCROOT)/devfwdHelper/launchd.plist"
+
+  devfwdTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: devfwdTests
+    dependencies:
+      - target: devfwd
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.devfwd.app.tests
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: "-"
+
+schemes:
+  devfwd:
+    build:
+      targets:
+        devfwd: all
+        com.devfwd.helper: all
+        devfwdTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - devfwdTests
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release
