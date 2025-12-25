@@ -109,6 +109,7 @@ struct SidebarView: View {
                 .buttonStyle(.plain)
                 .foregroundColor(.secondary)
             }
+            .padding(.bottom, 8)
         }
         .background(Color(nsColor: .controlBackgroundColor))
         .sheet(item: $importPreview) { preview in
