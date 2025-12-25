@@ -146,6 +146,12 @@ final class AppState: ObservableObject {
             deactivateEnvironment(id)
         }
 
+        // Clean up cooldown tracking for this environment and its services
+        lastEnvironmentToggleTime.removeValue(forKey: id)
+        for service in env.services {
+            lastServiceToggleTime.removeValue(forKey: service.id)
+        }
+
         environments.removeAll { $0.id == id }
 
         // Update selection
@@ -212,6 +218,9 @@ final class AppState: ObservableObject {
         if service.status == .running || service.status == .starting {
             processManager?.stopProcess(for: serviceId) { }
         }
+
+        // Clean up cooldown tracking
+        lastServiceToggleTime.removeValue(forKey: serviceId)
 
         environments[envIndex].services.remove(at: serviceIndex)
 
@@ -447,12 +456,14 @@ final class AppState: ObservableObject {
     // MARK: - Service Process Management
 
     private func startService(serviceId: UUID, in environmentIndex: Int) {
-        guard let serviceIndex = environments[environmentIndex].services.firstIndex(where: { $0.id == serviceId }),
+        guard environmentIndex < environments.count,
+              let serviceIndex = environments[environmentIndex].services.firstIndex(where: { $0.id == serviceId }),
               let processManager = processManager
         else { return }
 
         let service = environments[environmentIndex].services[serviceIndex]
         let interfaces = environments[environmentIndex].interfaces
+        let environmentId = environments[environmentIndex].id  // Capture ID, not index
 
         environments[environmentIndex].services[serviceIndex].status = .starting
 
@@ -461,7 +472,8 @@ final class AppState: ObservableObject {
             DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
                 guard let self = self else { return }
 
-                if let envIdx = self.environments.firstIndex(where: { $0.id == self.environments[environmentIndex].id }),
+                // Look up by IDs, not captured indices
+                if let envIdx = self.environments.firstIndex(where: { $0.id == environmentId }),
                    let svcIdx = self.environments[envIdx].services.firstIndex(where: { $0.id == serviceId }),
                    self.environments[envIdx].services[svcIdx].status == .starting,
                    processManager.isRunning(serviceId: serviceId) {
@@ -475,17 +487,20 @@ final class AppState: ObservableObject {
     }
 
     private func stopService(serviceId: UUID, in environmentIndex: Int) {
-        guard let serviceIndex = environments[environmentIndex].services.firstIndex(where: { $0.id == serviceId }),
+        guard environmentIndex < environments.count,
+              let serviceIndex = environments[environmentIndex].services.firstIndex(where: { $0.id == serviceId }),
               let processManager = processManager
         else { return }
 
+        let environmentId = environments[environmentIndex].id  // Capture ID, not index
         environments[environmentIndex].services[serviceIndex].status = .stopping
 
         processManager.stopProcess(for: serviceId) { [weak self] in
             Task { @MainActor in
                 guard let self = self else { return }
 
-                if let envIdx = self.environments.firstIndex(where: { $0.id == self.environments[environmentIndex].id }),
+                // Look up by IDs, not captured indices
+                if let envIdx = self.environments.firstIndex(where: { $0.id == environmentId }),
                    let svcIdx = self.environments[envIdx].services.firstIndex(where: { $0.id == serviceId }) {
                     self.environments[envIdx].services[svcIdx].status = .stopped
                 }
@@ -539,26 +554,39 @@ final class AppState: ObservableObject {
     // MARK: - App Lifecycle
 
     func stopAllEnvironments(completion: @escaping () -> Void) {
-        let activeIds = environments.filter { $0.isEnabled }.map { $0.id }
+        let activeEnvs = environments.filter { $0.isEnabled || $0.isTransitioning }
 
-        guard !activeIds.isEmpty else {
+        guard !activeEnvs.isEmpty else {
             completion()
             return
         }
 
-        let group = DispatchGroup()
-
-        for id in activeIds {
-            group.enter()
-            deactivateEnvironment(id)
-            // Give some time for deactivation
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                group.leave()
+        // Deactivate all environments
+        for env in activeEnvs {
+            if env.isEnabled && !env.isTransitioning {
+                deactivateEnvironment(env.id)
             }
         }
 
-        group.notify(queue: .main) {
-            completion()
+        // Poll for completion with timeout
+        var pollCount = 0
+        let maxPolls = 100  // 10 seconds max (100 * 100ms)
+
+        func checkCompletion() {
+            pollCount += 1
+            let stillActive = environments.contains { $0.isEnabled || $0.isTransitioning }
+
+            if !stillActive || pollCount >= maxPolls {
+                completion()
+            } else {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    checkCompletion()
+                }
+            }
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            checkCompletion()
         }
     }
 

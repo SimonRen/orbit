@@ -47,6 +47,10 @@ struct ContentView: View {
 struct WindowAccessor: NSViewRepresentable {
     private static let frameKey = "MainWindowFrame"
 
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
     func makeNSView(context: Context) -> NSView {
         let view = NSView()
         DispatchQueue.main.async {
@@ -59,15 +63,15 @@ struct WindowAccessor: NSViewRepresentable {
                     }
                 }
 
-                // Observe frame changes to save them
-                NotificationCenter.default.addObserver(
+                // Observe frame changes to save them (store observers for cleanup)
+                context.coordinator.resizeObserver = NotificationCenter.default.addObserver(
                     forName: NSWindow.didResizeNotification,
                     object: window,
                     queue: .main
                 ) { _ in
                     Self.saveFrame(window.frame)
                 }
-                NotificationCenter.default.addObserver(
+                context.coordinator.moveObserver = NotificationCenter.default.addObserver(
                     forName: NSWindow.didMoveNotification,
                     object: window,
                     queue: .main
@@ -94,6 +98,20 @@ struct WindowAccessor: NSViewRepresentable {
 
     private static func saveFrame(_ frame: NSRect) {
         UserDefaults.standard.set(NSStringFromRect(frame), forKey: frameKey)
+    }
+
+    class Coordinator {
+        var resizeObserver: NSObjectProtocol?
+        var moveObserver: NSObjectProtocol?
+
+        deinit {
+            if let observer = resizeObserver {
+                NotificationCenter.default.removeObserver(observer)
+            }
+            if let observer = moveObserver {
+                NotificationCenter.default.removeObserver(observer)
+            }
+        }
     }
 }
 
