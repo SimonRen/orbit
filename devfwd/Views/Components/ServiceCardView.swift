@@ -10,7 +10,6 @@ struct ServiceCardView: View {
     let onViewLogs: () -> Void
     let onEdit: () -> Void
     let onDelete: () -> Void
-    let onRestart: () -> Void
 
     @State private var isHovered = false
 
@@ -74,13 +73,6 @@ struct ServiceCardView: View {
                 }
                 .disabled(isEnvironmentActive || isEnvironmentTransitioning)
 
-                if service.status == .running || service.status == .failed {
-                    Button(action: onRestart) {
-                        Label("Restart", systemImage: "arrow.clockwise")
-                    }
-                    .disabled(isEnvironmentTransitioning || service.status.isTransitioning)
-                }
-
                 Divider()
 
                 Button(role: .destructive, action: onDelete) {
@@ -127,8 +119,7 @@ struct ServiceCardView: View {
             onToggle: { _ in },
             onViewLogs: {},
             onEdit: {},
-            onDelete: {},
-            onRestart: {}
+            onDelete: {}
         )
 
         ServiceCardView(
@@ -147,8 +138,7 @@ struct ServiceCardView: View {
             onToggle: { _ in },
             onViewLogs: {},
             onEdit: {},
-            onDelete: {},
-            onRestart: {}
+            onDelete: {}
         )
 
         ServiceCardView(
@@ -168,8 +158,7 @@ struct ServiceCardView: View {
             onToggle: { _ in },
             onViewLogs: {},
             onEdit: {},
-            onDelete: {},
-            onRestart: {}
+            onDelete: {}
         )
     }
     .padding()

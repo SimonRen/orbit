@@ -9,7 +9,6 @@ struct ServiceListView: View {
     let onViewLogs: (Service) -> Void
     let onEdit: (Service) -> Void
     let onDelete: (Service) -> Void
-    let onRestart: (Service) -> Void
     let canToggleService: (UUID) -> Bool
 
     var body: some View {
@@ -26,8 +25,7 @@ struct ServiceListView: View {
                         onToggle: { enabled in onToggle(service.id, enabled) },
                         onViewLogs: { onViewLogs(service) },
                         onEdit: { onEdit(service) },
-                        onDelete: { onDelete(service) },
-                        onRestart: { onRestart(service) }
+                        onDelete: { onDelete(service) }
                     )
                 }
             }
@@ -62,7 +60,6 @@ struct ServiceListView: View {
             onViewLogs: { _ in },
             onEdit: { _ in },
             onDelete: { _ in },
-            onRestart: { _ in },
             canToggleService: { _ in true }
         )
 
@@ -84,7 +81,6 @@ struct ServiceListView: View {
             onViewLogs: { _ in },
             onEdit: { _ in },
             onDelete: { _ in },
-            onRestart: { _ in },
             canToggleService: { _ in true }
         )
     }

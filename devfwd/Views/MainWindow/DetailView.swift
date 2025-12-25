@@ -389,9 +389,6 @@ struct DetailView: View {
                         )
                     }
                 },
-                onRestart: { service in
-                    restartService(service)
-                },
                 canToggleService: { serviceId in
                     appState.canToggleService(environmentId: environmentId, serviceId: serviceId)
                 }
@@ -422,13 +419,6 @@ struct DetailView: View {
         env.interfaces = editedInterfaces
         appState.updateEnvironment(env)
         hasUnsavedChanges = false
-    }
-
-    private func restartService(_ service: Service) {
-        appState.toggleServiceEnabled(environmentId: environmentId, serviceId: service.id)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            appState.toggleServiceEnabled(environmentId: environmentId, serviceId: service.id)
-        }
     }
 
     private func suggestNextIP() -> String {
