@@ -22,6 +22,7 @@ struct ContentView: View {
             }
         }
         .frame(minWidth: 800, minHeight: 500)
+        .background(WindowAccessor())
         .alert(item: $appState.lastError) { error in
             Alert(
                 title: Text("Error"),
@@ -40,6 +41,30 @@ struct ContentView: View {
             Text("Orbit needs to install a privileged helper to manage network interfaces. This requires administrator permission once.")
         }
     }
+}
+
+/// Helper to access NSWindow and adjust traffic light positions
+struct WindowAccessor: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async {
+            if let window = view.window {
+                // Adjust traffic light button positions
+                let buttons: [NSWindow.ButtonType] = [.closeButton, .miniaturizeButton, .zoomButton]
+                for buttonType in buttons {
+                    if let button = window.standardWindowButton(buttonType) {
+                        var frame = button.frame
+                        frame.origin.x += 4
+                        frame.origin.y -= 4
+                        button.setFrameOrigin(frame.origin)
+                    }
+                }
+            }
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
 }
 
 #Preview {

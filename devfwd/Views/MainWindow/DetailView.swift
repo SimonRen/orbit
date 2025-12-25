@@ -51,11 +51,6 @@ struct DetailView: View {
 
                             // Services section
                             servicesSection(env: env)
-
-                            Spacer(minLength: 20)
-
-                            // Delete button at bottom
-                            deleteSection
                         }
                         .padding(20)
                     }
@@ -213,7 +208,7 @@ struct DetailView: View {
                 TextField("Environment Name", text: $editedName)
                     .textFieldStyle(.roundedBorder)
                     .font(.title2)
-                    .frame(maxWidth: 300)
+                    .frame(maxWidth: 200)
 
                 Button("Save") {
                     saveChanges()
@@ -273,7 +268,8 @@ struct DetailView: View {
             .disabled(isTransitioning)
         }
         .padding(.horizontal, 20)
-        .padding(.vertical, 14)
+        .padding(.top, -10)
+        .padding(.bottom, 14)
     }
 
     // MARK: - Interfaces Card
@@ -399,29 +395,6 @@ struct DetailView: View {
                     appState.canToggleService(environmentId: environmentId, serviceId: serviceId)
                 }
             )
-        }
-    }
-
-    // MARK: - Delete Section
-
-    private var deleteSection: some View {
-        HStack {
-            Spacer()
-            Button(role: .destructive) {
-                if isActive || isTransitioning {
-                    showingCannotDeleteEnvAlert = true
-                } else {
-                    showingDeleteConfirmation = true
-                }
-            } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "trash")
-                    Text("Delete Environment")
-                }
-                .font(.callout)
-            }
-            .buttonStyle(.plain)
-            .foregroundColor(.red)
         }
     }
 
