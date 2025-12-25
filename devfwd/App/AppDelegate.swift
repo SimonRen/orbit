@@ -4,10 +4,12 @@ import Combine
 
 /// App delegate handling menubar and app lifecycle
 @MainActor
-class AppDelegate: NSObject, NSApplicationDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var statusItem: NSStatusItem?
+    private var popover: NSPopover?
     private var appState: AppState?
     private var cancellables = Set<AnyCancellable>()
+    private var eventMonitor: Any?
 
     // Cached state for menu building (updated via Combine)
     private var cachedEnvironments: [DevEnvironment] = []
@@ -21,7 +23,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         self.appState = appState
         setupStatusItem()
+        setupPopover()
         observeStateChanges()
+        setupEventMonitor()
     }
 
     // MARK: - NSApplicationDelegate
@@ -73,9 +77,32 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         if let button = statusItem?.button {
             button.image = NSImage(systemSymbolName: "arrow.triangle.branch", accessibilityDescription: "DEV Fwd")
+            button.target = self
+            button.action = #selector(statusItemClicked(_:))
         }
+    }
 
-        rebuildMenu()
+    private func setupPopover() {
+        popover = NSPopover()
+        popover?.contentSize = NSSize(width: 220, height: 200)
+        popover?.behavior = .transient
+        popover?.delegate = self
+        updatePopoverContent()
+    }
+
+    private func updatePopoverContent() {
+        guard let appState = appState else { return }
+        let contentView = StatusMenuView(appState: appState) { [weak self] in
+            self?.closePopover()
+        }
+        popover?.contentViewController = NSHostingController(rootView: contentView)
+    }
+
+    private func setupEventMonitor() {
+        // Close popover when clicking outside
+        eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+            self?.closePopover()
+        }
     }
 
     private func observeStateChanges() {
@@ -84,7 +111,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             .receive(on: RunLoop.main)
             .sink { [weak self] environments in
                 self?.cachedEnvironments = environments
-                self?.rebuildMenu()
+                self?.updatePopoverContent()
                 self?.updateStatusIcon()
             }
             .store(in: &cancellables)
@@ -117,136 +144,49 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func rebuildMenu() {
-        let menu = NSMenu()
+    // MARK: - Popover Control
 
-        // Header
-        let headerItem = NSMenuItem(title: "ENVIRONMENTS", action: nil, keyEquivalent: "")
-        headerItem.isEnabled = false
-        headerItem.attributedTitle = NSAttributedString(
-            string: "ENVIRONMENTS",
-            attributes: [
-                .foregroundColor: NSColor.secondaryLabelColor,
-                .font: NSFont.systemFont(ofSize: 11, weight: .semibold)
-            ]
-        )
-        menu.addItem(headerItem)
-
-        // Environment toggles
-        if cachedEnvironments.isEmpty {
-            let emptyItem = NSMenuItem(title: "No environments", action: nil, keyEquivalent: "")
-            emptyItem.isEnabled = false
-            menu.addItem(emptyItem)
-        } else {
-            for environment in cachedEnvironments.sorted(by: { $0.order < $1.order }) {
-                let item = NSMenuItem()
-                item.view = createEnvironmentMenuItemView(for: environment)
-                menu.addItem(item)
-            }
-        }
-
-        menu.addItem(NSMenuItem.separator())
-
-        // Main Frame
-        let mainFrameItem = NSMenuItem(
-            title: "Show Window",
-            action: #selector(showMainWindow(_:)),
-            keyEquivalent: ""
-        )
-        mainFrameItem.target = self
-        menu.addItem(mainFrameItem)
-
-        menu.addItem(NSMenuItem.separator())
-
-        // Quit
-        let quitItem = NSMenuItem(
-            title: "Quit DEV Fwd",
-            action: #selector(quitApp(_:)),
-            keyEquivalent: "q"
-        )
-        quitItem.target = self
-        menu.addItem(quitItem)
-
-        statusItem?.menu = menu
+    @objc private func statusItemClicked(_ sender: NSStatusBarButton) {
+        togglePopover()
     }
 
-    /// Creates a custom view for environment menu item with name and toggle switch
-    private func createEnvironmentMenuItemView(for environment: DevEnvironment) -> NSView {
-        let containerView = NSView(frame: NSRect(x: 0, y: 0, width: 200, height: 28))
-
-        // Environment name label
-        let label = NSTextField(labelWithString: environment.name)
-        label.font = NSFont.systemFont(ofSize: 13)
-        label.textColor = environment.isTransitioning ? .secondaryLabelColor : .labelColor
-        label.translatesAutoresizingMaskIntoConstraints = false
-        containerView.addSubview(label)
-
-        if environment.isTransitioning {
-            // Show spinner when transitioning
-            let spinner = NSProgressIndicator()
-            spinner.style = .spinning
-            spinner.controlSize = .small
-            spinner.isIndeterminate = true
-            spinner.startAnimation(nil)
-            spinner.translatesAutoresizingMaskIntoConstraints = false
-            containerView.addSubview(spinner)
-
-            NSLayoutConstraint.activate([
-                label.leadingAnchor.constraint(equalTo: containerView.leadingAnchor, constant: 14),
-                label.centerYAnchor.constraint(equalTo: containerView.centerYAnchor),
-
-                spinner.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -14),
-                spinner.centerYAnchor.constraint(equalTo: containerView.centerYAnchor),
-
-                label.trailingAnchor.constraint(lessThanOrEqualTo: spinner.leadingAnchor, constant: -8)
-            ])
+    private func togglePopover() {
+        if let popover = popover, popover.isShown {
+            closePopover()
         } else {
-            // Toggle switch (only when not transitioning)
-            let toggle = NSSwitch()
-            toggle.controlSize = .mini
-            toggle.state = environment.isEnabled ? .on : .off
-            toggle.target = self
-            toggle.action = #selector(environmentSwitchToggled(_:))
-            toggle.identifier = NSUserInterfaceItemIdentifier(environment.id.uuidString)
-            toggle.translatesAutoresizingMaskIntoConstraints = false
-
-            // Check if we can toggle (respects cooldown)
-            let canToggle = appState?.canToggleEnvironment(environment.id) ?? false
-            toggle.isEnabled = canToggle
-
-            containerView.addSubview(toggle)
-
-            NSLayoutConstraint.activate([
-                label.leadingAnchor.constraint(equalTo: containerView.leadingAnchor, constant: 14),
-                label.centerYAnchor.constraint(equalTo: containerView.centerYAnchor),
-
-                toggle.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -14),
-                toggle.centerYAnchor.constraint(equalTo: containerView.centerYAnchor),
-
-                label.trailingAnchor.constraint(lessThanOrEqualTo: toggle.leadingAnchor, constant: -8)
-            ])
+            showPopover()
         }
+    }
 
-        return containerView
+    private func showPopover() {
+        guard let button = statusItem?.button, let popover = popover else { return }
+
+        updatePopoverContent()
+
+        // Show popover relative to the button
+        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+
+        // Configure popover window for fullscreen compatibility
+        if let popoverWindow = popover.contentViewController?.view.window {
+            popoverWindow.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+            popoverWindow.level = .popUpMenu
+        }
+    }
+
+    private func closePopover() {
+        popover?.performClose(nil)
+    }
+
+    // MARK: - NSPopoverDelegate
+
+    nonisolated func popoverDidClose(_ notification: Notification) {
+        // Popover closed
     }
 
     // MARK: - Actions
 
-    @objc private func environmentSwitchToggled(_ sender: NSSwitch) {
-        guard let identifier = sender.identifier?.rawValue,
-              let environmentId = UUID(uuidString: identifier) else { return }
-
-        // Toggle the environment - menu stays open
-        // The menu will rebuild automatically via state observation
-        appState?.toggleEnvironment(environmentId)
-    }
-
-    @objc private func toggleEnvironment(_ sender: NSMenuItem) {
-        guard let environmentId = sender.representedObject as? UUID else { return }
-        appState?.toggleEnvironment(environmentId)
-    }
-
-    @objc private func showMainWindow(_ sender: NSMenuItem) {
+    @objc private func showMainWindow(_ sender: Any?) {
+        closePopover()
         NSApp.activate(ignoringOtherApps: true)
 
         // Find existing window or create new one
@@ -258,7 +198,129 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    @objc private func quitApp(_ sender: NSMenuItem) {
+    @objc private func quitApp(_ sender: Any?) {
+        closePopover()
         NSApp.terminate(nil)
+    }
+
+    func toggleEnvironment(_ id: UUID) {
+        appState?.toggleEnvironment(id)
+    }
+
+    func canToggleEnvironment(_ id: UUID) -> Bool {
+        appState?.canToggleEnvironment(id) ?? false
+    }
+}
+
+// MARK: - Status Menu SwiftUI View
+
+struct StatusMenuView: View {
+    @ObservedObject var appState: AppState
+    var onDismiss: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Header
+            Text("ENVIRONMENTS")
+                .font(.caption)
+                .fontWeight(.semibold)
+                .foregroundColor(.secondary)
+                .padding(.horizontal, 12)
+                .padding(.top, 10)
+                .padding(.bottom, 6)
+
+            // Environment list
+            if appState.environments.isEmpty {
+                Text("No environments")
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+            } else {
+                ForEach(appState.sortedEnvironments) { environment in
+                    EnvironmentMenuRow(
+                        environment: environment,
+                        canToggle: appState.canToggleEnvironment(environment.id),
+                        onToggle: {
+                            appState.toggleEnvironment(environment.id)
+                        }
+                    )
+                }
+            }
+
+            Divider()
+                .padding(.vertical, 6)
+
+            // Show Window button
+            Button(action: {
+                onDismiss()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    NSApp.activate(ignoringOtherApps: true)
+                    if let window = NSApp.windows.first(where: { $0.canBecomeMain }) {
+                        window.makeKeyAndOrderFront(nil)
+                    } else {
+                        WindowCoordinator.shared.openMainWindow?()
+                    }
+                }
+            }) {
+                Text("Show Window")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+
+            Divider()
+                .padding(.vertical, 6)
+
+            // Quit button
+            Button(action: {
+                onDismiss()
+                NSApp.terminate(nil)
+            }) {
+                HStack {
+                    Text("Quit DEV Fwd")
+                    Spacer()
+                    Text("⌘Q")
+                        .foregroundColor(.secondary)
+                }
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .padding(.bottom, 4)
+        }
+        .frame(width: 200)
+    }
+}
+
+struct EnvironmentMenuRow: View {
+    let environment: DevEnvironment
+    let canToggle: Bool
+    let onToggle: () -> Void
+
+    var body: some View {
+        HStack {
+            Text(environment.name)
+                .foregroundColor(environment.isTransitioning ? .secondary : .primary)
+
+            Spacer()
+
+            if environment.isTransitioning {
+                ProgressView()
+                    .controlSize(.small)
+                    .scaleEffect(0.7)
+            } else {
+                Toggle("", isOn: Binding(
+                    get: { environment.isEnabled },
+                    set: { _ in onToggle() }
+                ))
+                .toggleStyle(.switch)
+                .controlSize(.mini)
+                .disabled(!canToggle)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
     }
 }
