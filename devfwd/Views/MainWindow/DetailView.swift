@@ -478,14 +478,39 @@ struct DetailView: View {
     }
 
     private func refreshInterfaceStatus() {
-        let networkManager = NetworkManager.shared
-        var active: Set<String> = []
-        for ip in editedInterfaces {
-            if networkManager.isInterfaceActive(ip) {
-                active.insert(ip)
+        let interfaces = editedInterfaces
+        // Run on background thread to avoid blocking UI
+        DispatchQueue.global(qos: .userInitiated).async {
+            // Run ifconfig once and check all IPs
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/sbin/ifconfig")
+            process.arguments = ["lo0"]
+
+            let pipe = Pipe()
+            process.standardOutput = pipe
+
+            var active: Set<String> = []
+            do {
+                try process.run()
+                process.waitUntilExit()
+
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                if let output = String(data: data, encoding: .utf8) {
+                    for ip in interfaces {
+                        if output.contains(ip) {
+                            active.insert(ip)
+                        }
+                    }
+                }
+            } catch {
+                // Silently fail
+            }
+
+            // Update UI on main thread
+            DispatchQueue.main.async {
+                self.activeInterfaces = active
             }
         }
-        activeInterfaces = active
     }
 }
 
