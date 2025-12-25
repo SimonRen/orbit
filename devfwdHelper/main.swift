@@ -1,6 +1,6 @@
 import Foundation
 
-/// Privileged helper tool for devfwd
+/// Privileged helper tool for Orbit
 /// Runs as root via launchd and handles network interface operations
 class HelperTool: NSObject, NSXPCListenerDelegate, HelperProtocol {
     private let listener: NSXPCListener

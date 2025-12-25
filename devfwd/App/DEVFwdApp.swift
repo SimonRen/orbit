@@ -8,7 +8,7 @@ class WindowCoordinator: ObservableObject {
 }
 
 @main
-struct DEVFwdApp: App {
+struct OrbitApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var appState = AppState()
     @Environment(\.openWindow) private var openWindow

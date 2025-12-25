@@ -91,7 +91,7 @@ final class HelperClient: ObservableObject {
         var error: Unmanaged<CFError>?
         let success = SMJobBless(
             kSMDomainSystemLaunchd,
-            "com.devfwd.helper" as CFString,
+            "com.orbit.helper" as CFString,
             auth,
             &error
         )
@@ -107,7 +107,7 @@ final class HelperClient: ObservableObject {
     /// Uninstall the privileged helper
     func uninstallHelper() async throws {
         if #available(macOS 13.0, *) {
-            let service = SMAppService.daemon(plistName: "com.devfwd.helper.plist")
+            let service = SMAppService.daemon(plistName: "com.orbit.helper.plist")
             try await service.unregister()
             isHelperInstalled = false
         }

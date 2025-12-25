@@ -14,6 +14,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     // Cached state for menu building (updated via Combine)
     private var cachedEnvironments: [DevEnvironment] = []
 
+    // Window observation
+    private var windowObservers: [NSObjectProtocol] = []
+
     // MARK: - Configuration
 
     /// Configure the delegate with shared app state (only runs once)
@@ -26,6 +29,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         setupPopover()
         observeStateChanges()
         setupEventMonitor()
+        setupWindowObservation()
     }
 
     // MARK: - NSApplicationDelegate
@@ -76,7 +80,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
 
         if let button = statusItem?.button {
-            button.image = NSImage(systemSymbolName: "arrow.triangle.branch", accessibilityDescription: "DEV Fwd")
+            button.image = NSImage(systemSymbolName: "arrow.triangle.branch", accessibilityDescription: "Orbit")
             button.target = self
             button.action = #selector(statusItemClicked(_:))
         }
@@ -101,6 +105,48 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         // Close popover when clicking outside
         eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
             self?.closePopover()
+        }
+    }
+
+    private func setupWindowObservation() {
+        // Observe window visibility to toggle Dock icon
+        let willOpen = NotificationCenter.default.addObserver(
+            forName: NSWindow.didBecomeMainNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.updateDockIconVisibility()
+        }
+
+        let willClose = NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            // Delay check to allow window to fully close
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                self?.updateDockIconVisibility()
+            }
+        }
+
+        windowObservers = [willOpen, willClose]
+    }
+
+    private func updateDockIconVisibility() {
+        // Check if any main windows are visible (exclude popovers and panels)
+        let hasVisibleWindow = NSApp.windows.contains { window in
+            window.isVisible &&
+            window.canBecomeMain &&
+            !window.isKind(of: NSPanel.self) &&
+            window.className != "NSStatusBarWindow"
+        }
+
+        if hasVisibleWindow {
+            // Show in Dock
+            NSApp.setActivationPolicy(.regular)
+        } else {
+            // Hide from Dock (menubar only)
+            NSApp.setActivationPolicy(.accessory)
         }
     }
 
@@ -159,6 +205,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     @objc private func showMainWindow(_ sender: Any?) {
         closePopover()
+
+        // Show in Dock before activating
+        NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
 
         // Find existing window or create new one
@@ -218,6 +267,8 @@ struct StatusMenuView: View {
             MenuRowButton(label: "Show Window") {
                 onDismiss()
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    // Show in Dock before activating
+                    NSApp.setActivationPolicy(.regular)
                     NSApp.activate(ignoringOtherApps: true)
                     if let window = NSApp.windows.first(where: { $0.canBecomeMain }) {
                         window.makeKeyAndOrderFront(nil)
@@ -231,7 +282,7 @@ struct StatusMenuView: View {
                 .padding(.vertical, 6)
 
             // Quit button
-            MenuRowButton(label: "Quit DEV Fwd", shortcut: "⌘Q") {
+            MenuRowButton(label: "Quit Orbit", shortcut: "⌘Q") {
                 onDismiss()
                 NSApp.terminate(nil)
             }

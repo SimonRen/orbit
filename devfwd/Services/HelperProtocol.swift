@@ -29,6 +29,6 @@ protocol HelperProgressProtocol {
 
 /// Helper identification constants
 enum HelperConstants {
-    static let machServiceName = "com.devfwd.helper"
+    static let machServiceName = "com.orbit.helper"
     static let helperVersion = "1.0.0"
 }

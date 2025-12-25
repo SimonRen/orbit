@@ -37,7 +37,7 @@ struct ContentView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("devfwd needs to install a privileged helper to manage network interfaces. This requires administrator permission once.")
+            Text("Orbit needs to install a privileged helper to manage network interfaces. This requires administrator permission once.")
         }
     }
 }

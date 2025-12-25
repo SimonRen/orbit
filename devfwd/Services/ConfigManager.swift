@@ -40,7 +40,7 @@ final class ConfigManager {
     /// Application support directory path
     private var appSupportDirectory: URL {
         let paths = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)
-        return paths[0].appendingPathComponent("DEV Fwd", isDirectory: true)
+        return paths[0].appendingPathComponent("Orbit", isDirectory: true)
     }
 
     /// Configuration file path
