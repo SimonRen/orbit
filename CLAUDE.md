@@ -7,23 +7,26 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 This project uses XcodeGen to generate the Xcode project from `project.yml`:
 
 ```bash
-# Generate Xcode project (required after adding/removing files)
+# Generate Xcode project (required after adding/removing files or modifying project.yml)
 xcodegen generate
 
-# Build the app (Debug - for development)
+# Build (Debug)
 xcodebuild -project orbit.xcodeproj -scheme orbit -configuration Debug build
 
-# Build the app (Release - for distribution)
+# Build (Release)
 xcodebuild -project orbit.xcodeproj -scheme orbit -configuration Release build
 
-# Run tests
+# Run all tests
 xcodebuild -project orbit.xcodeproj -scheme orbit test
 
-# Relaunch app after build
+# Run a single test
+xcodebuild -project orbit.xcodeproj -scheme orbit test -only-testing:orbitTests/OrbitTests/testValidIPFormat
+
+# Build and relaunch
 pkill -f "Orbit.app"; open ~/Library/Developer/Xcode/DerivedData/orbit-*/Build/Products/Debug/Orbit.app
 ```
 
-The generated `*.xcodeproj` is gitignored - always regenerate with `xcodegen generate`.
+The `*.xcodeproj` is gitignored - always regenerate with `xcodegen generate`.
 
 ## Build Configurations
 
@@ -53,24 +56,28 @@ Orbit is a macOS SwiftUI app for managing development environment port forwardin
 - Configure services that run commands with variable substitution ($IP, $IP2, etc.)
 - Toggle environments on/off from both the main window and menubar
 
+### Source Structure
+
+- `orbit/` - Main app source (SwiftUI views, models, services)
+- `orbitHelper/` - Privileged helper daemon (runs as root via XPC)
+- `orbitTests/` - Unit tests
+
 ### Key Components
 
-**Privileged Helper (`orbitHelper/`)**: A separate XPC service that runs as root to manage network interface aliases without repeated password prompts. Installed via SMJobBless on first use.
+**Privileged Helper (`orbitHelper/`)**: XPC service running as root to manage network interface aliases without repeated password prompts. Installed via SMJobBless on first use. The helper binary is embedded in the app bundle at `Contents/Library/LaunchServices/com.orbit.helper`.
 
-**AppState (`ViewModels/AppState.swift`)**: Central ObservableObject holding all application state. Manages:
+**AppState (`orbit/ViewModels/AppState.swift`)**: Central ObservableObject holding all application state. Manages:
 - Environment/service CRUD operations
 - Activation/deactivation with transition state tracking
 - Toggle cooldown (500ms) to prevent rapid clicks
 - Process lifecycle coordination
 - Import/export of environment configurations
 
-**ProcessManager (`Services/ProcessManager.swift`)**: Spawns and monitors service processes. Key behavior:
-- Kills entire process tree on stop (not just parent bash)
-- Uses `pgrep -P` to find child processes recursively
+**ProcessManager (`orbit/Services/ProcessManager.swift`)**: Spawns and monitors service processes. Kills entire process tree on stop using `pgrep -P` to find child processes recursively.
 
-**NetworkManager (`Services/NetworkManager.swift`)**: Communicates with the privileged helper via XPC to add/remove interface aliases.
+**NetworkManager (`orbit/Services/NetworkManager.swift`)**: Communicates with the privileged helper via XPC to add/remove interface aliases.
 
-**WindowCoordinator (`App/OrbitApp.swift`)**: Singleton for cross-window communication. Provides closures to open main window, log windows, and trigger import dialogs from anywhere (e.g., menubar).
+**WindowCoordinator (`orbit/App/OrbitApp.swift`)**: Singleton for cross-window communication. Provides closures to open main window, log windows, and trigger import dialogs from anywhere (e.g., menubar).
 
 ### Data Flow
 
