@@ -45,6 +45,10 @@ targets:
         GENERATE_INFOPLIST_FILE: NO
         ENABLE_HARDENED_RUNTIME: YES
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+      configs:
+        Release:
+          CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO
+          OTHER_CODE_SIGN_FLAGS: "--timestamp"
     entitlements:
       path: devfwd/Resources/devfwd.entitlements
       properties:
@@ -69,6 +73,9 @@ targets:
         INFOPLIST_FILE: devfwdHelper/Info.plist
         CREATE_INFOPLIST_SECTION_IN_BINARY: YES
         OTHER_LDFLAGS: "-sectcreate __TEXT __launchd_plist $(SRCROOT)/devfwdHelper/launchd.plist"
+      configs:
+        Release:
+          OTHER_CODE_SIGN_FLAGS: "--timestamp"
 
   orbitTests:
     type: bundle.unit-test
