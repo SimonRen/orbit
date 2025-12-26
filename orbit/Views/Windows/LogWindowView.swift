@@ -8,13 +8,9 @@ struct LogWindowView: View {
 
     @State private var autoScroll = true
 
+    /// Get service using O(1) cache lookup
     private var service: Service? {
-        for env in appState.environments {
-            if let svc = env.services.first(where: { $0.id == serviceId }) {
-                return svc
-            }
-        }
-        return nil
+        appState.service(for: serviceId)
     }
 
     var body: some View {

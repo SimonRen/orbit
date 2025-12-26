@@ -38,33 +38,29 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     }
 
     nonisolated func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        // Check on main actor
-        let hasActive = MainActor.assumeIsolated {
-            appState?.hasActiveEnvironments ?? false
-        }
+        // AppKit guarantees this is called on main thread
+        return MainActor.assumeIsolated {
+            guard appState?.hasActiveEnvironments ?? false else {
+                return .terminateNow
+            }
 
-        guard hasActive else {
-            return .terminateNow
-        }
+            // Show confirmation dialog
+            let alert = NSAlert()
+            alert.messageText = "Active Environments"
+            alert.informativeText = "Active environments will be stopped. Quit anyway?"
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: "Quit")
+            alert.addButton(withTitle: "Cancel")
 
-        // Show confirmation dialog
-        let alert = NSAlert()
-        alert.messageText = "Active Environments"
-        alert.informativeText = "Active environments will be stopped. Quit anyway?"
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: "Quit")
-        alert.addButton(withTitle: "Cancel")
-
-        if alert.runModal() == .alertFirstButtonReturn {
-            // User confirmed - stop all and quit
-            Task { @MainActor in
+            if alert.runModal() == .alertFirstButtonReturn {
+                // User confirmed - stop all and quit
                 appState?.stopAllEnvironments {
                     NSApp.reply(toApplicationShouldTerminate: true)
                 }
+                return .terminateLater
+            } else {
+                return .terminateCancel
             }
-            return .terminateLater
-        } else {
-            return .terminateCancel
         }
     }
 
@@ -114,17 +110,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.updateDockIconVisibility()
+            // queue: .main guarantees main thread
+            MainActor.assumeIsolated {
+                self?.updateDockIconVisibility()
+            }
         }
 
         let willClose = NotificationCenter.default.addObserver(
             forName: NSWindow.willCloseNotification,
             object: nil,
             queue: .main
-        ) { [weak self] notification in
+        ) { [weak self] _ in
             // Delay check to allow window to fully close
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                self?.updateDockIconVisibility()
+                MainActor.assumeIsolated {
+                    self?.updateDockIconVisibility()
+                }
             }
         }
 

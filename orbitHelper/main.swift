@@ -1,9 +1,30 @@
 import Foundation
+import Security
 
 /// Privileged helper tool for Orbit
 /// Runs as root via launchd and handles network interface operations
 class HelperTool: NSObject, NSXPCListenerDelegate, HelperProtocol {
     private let listener: NSXPCListener
+
+    /// Code signing requirement for the main app
+    /// Matches: signed by our team ID with the correct bundle identifier
+    private let codeSigningRequirement: SecRequirement? = {
+        // Requirement: Must be signed by Apple (anchor apple generic) with our team ID and bundle ID
+        // This ensures only our legitimately signed main app can connect
+        let requirementString = """
+            anchor apple generic and \
+            identifier "com.orbit.app" and \
+            certificate leaf[subject.OU] = "DN4YAHWP2P"
+            """ as CFString
+
+        var requirement: SecRequirement?
+        let status = SecRequirementCreateWithString(requirementString, [], &requirement)
+        if status != errSecSuccess {
+            // Log error but continue - verification will fail safely
+            NSLog("HelperTool: Failed to create code signing requirement: \(status)")
+        }
+        return requirement
+    }()
 
     override init() {
         self.listener = NSXPCListener(machServiceName: HelperConstants.machServiceName)
@@ -19,8 +40,12 @@ class HelperTool: NSObject, NSXPCListenerDelegate, HelperProtocol {
     // MARK: - NSXPCListenerDelegate
 
     func listener(_ listener: NSXPCListener, shouldAcceptNewConnection newConnection: NSXPCConnection) -> Bool {
-        // Verify the connecting app is our main app
-        // In production, add code signing verification here
+        // Verify the connecting process is signed by our team with correct bundle ID
+        guard verifyCodeSignature(of: newConnection) else {
+            NSLog("HelperTool: Rejected connection - code signature verification failed")
+            return false
+        }
+
         newConnection.exportedInterface = NSXPCInterface(with: HelperProtocol.self)
         newConnection.exportedObject = self
 
@@ -33,6 +58,43 @@ class HelperTool: NSObject, NSXPCListenerDelegate, HelperProtocol {
         }
 
         newConnection.resume()
+        return true
+    }
+
+    // MARK: - Code Signature Verification
+
+    /// Verify that the connecting process has a valid code signature from our team
+    private func verifyCodeSignature(of connection: NSXPCConnection) -> Bool {
+        guard let requirement = codeSigningRequirement else {
+            NSLog("HelperTool: No code signing requirement available")
+            return false
+        }
+
+        // Get the connecting process's PID
+        let pid = connection.processIdentifier
+
+        // Create a SecCode object for the connecting process
+        var code: SecCode?
+        let codeStatus = SecCodeCopyGuestWithAttributes(
+            nil,
+            [kSecGuestAttributePid: pid] as CFDictionary,
+            [],
+            &code
+        )
+
+        guard codeStatus == errSecSuccess, let secCode = code else {
+            NSLog("HelperTool: Failed to get SecCode for PID \(pid): \(codeStatus)")
+            return false
+        }
+
+        // Verify the code satisfies our requirement
+        let verifyStatus = SecCodeCheckValidity(secCode, [], requirement)
+
+        if verifyStatus != errSecSuccess {
+            NSLog("HelperTool: Code signature verification failed for PID \(pid): \(verifyStatus)")
+            return false
+        }
+
         return true
     }
 

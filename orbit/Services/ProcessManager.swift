@@ -216,40 +216,6 @@ final class ProcessManager {
         }
     }
 
-    /// Recursively gets all child process IDs of a given parent PID
-    private func getChildProcesses(of parentPid: pid_t) -> [pid_t] {
-        var children: [pid_t] = []
-
-        // Use pgrep to find child processes
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
-        task.arguments = ["-P", "\(parentPid)"]
-
-        let pipe = Pipe()
-        task.standardOutput = pipe
-        task.standardError = FileHandle.nullDevice
-
-        do {
-            try task.run()
-            task.waitUntilExit()
-
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            if let output = String(data: data, encoding: .utf8) {
-                let pids = output.split(separator: "\n").compactMap { pid_t($0) }
-                children.append(contentsOf: pids)
-
-                // Recursively get children of children
-                for childPid in pids {
-                    children.append(contentsOf: getChildProcesses(of: childPid))
-                }
-            }
-        } catch {
-            // pgrep failed, ignore
-        }
-
-        return children
-    }
-
     /// Checks if a process is running for the given service
     func isRunning(serviceId: UUID) -> Bool {
         lock.lock()
