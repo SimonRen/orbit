@@ -35,6 +35,9 @@ final class AppState: ObservableObject {
     /// Minimum cooldown period between toggles (milliseconds)
     private let toggleCooldownMs: Double = 500
 
+    /// Cache for O(1) service-to-environment lookup (serviceId -> environmentId)
+    private var serviceToEnvironmentCache: [UUID: UUID] = [:]
+
     // MARK: - Dependencies
 
     private let configManager = ConfigManager.shared
@@ -56,6 +59,33 @@ final class AppState: ObservableObject {
 
     var sortedEnvironments: [DevEnvironment] {
         environments.sorted { $0.order < $1.order }
+    }
+
+    // MARK: - Service Lookup Cache
+
+    /// Rebuild the service-to-environment cache for O(1) lookups
+    private func rebuildServiceCache() {
+        serviceToEnvironmentCache.removeAll()
+        for env in environments {
+            for service in env.services {
+                serviceToEnvironmentCache[service.id] = env.id
+            }
+        }
+    }
+
+    /// Find environment and service indices by service ID using cache (O(1) lookup)
+    private func findServiceIndices(serviceId: UUID) -> (envIndex: Int, serviceIndex: Int)? {
+        guard let envId = serviceToEnvironmentCache[serviceId],
+              let envIndex = environments.firstIndex(where: { $0.id == envId }),
+              let serviceIndex = environments[envIndex].services.firstIndex(where: { $0.id == serviceId })
+        else { return nil }
+        return (envIndex, serviceIndex)
+    }
+
+    /// Get a service by ID using O(1) cache lookup (for views that need service data)
+    func service(for serviceId: UUID) -> Service? {
+        guard let (envIndex, serviceIndex) = findServiceIndices(serviceId: serviceId) else { return nil }
+        return environments[envIndex].services[serviceIndex]
     }
 
     // MARK: - Initialization
@@ -80,6 +110,8 @@ final class AppState: ObservableObject {
             self.environments = config.environments
             // Select first environment if available
             self.selectedEnvironmentId = environments.first?.id
+            // Build service lookup cache
+            rebuildServiceCache()
         } catch {
             self.lastError = .configLoadFailed(error.localizedDescription)
             self.environments = []
@@ -152,10 +184,11 @@ final class AppState: ObservableObject {
             deactivateEnvironment(id)
         }
 
-        // Clean up cooldown tracking for this environment and its services
+        // Clean up cooldown tracking and cache for this environment and its services
         lastEnvironmentToggleTime.removeValue(forKey: id)
         for service in env.services {
             lastServiceToggleTime.removeValue(forKey: service.id)
+            serviceToEnvironmentCache.removeValue(forKey: service.id)
         }
 
         environments.removeAll { $0.id == id }
@@ -196,6 +229,8 @@ final class AppState: ObservableObject {
         var newService = service
         newService.order = environments[index].services.count
         environments[index].services.append(newService)
+        // Update cache
+        serviceToEnvironmentCache[newService.id] = environmentId
     }
 
     func updateService(in environmentId: UUID, service: Service) {
@@ -225,8 +260,9 @@ final class AppState: ObservableObject {
             processManager?.stopProcess(for: serviceId) { }
         }
 
-        // Clean up cooldown tracking
+        // Clean up cooldown tracking and cache
         lastServiceToggleTime.removeValue(forKey: serviceId)
+        serviceToEnvironmentCache.removeValue(forKey: serviceId)
 
         environments[envIndex].services.remove(at: serviceIndex)
 
@@ -524,43 +560,33 @@ final class AppState: ObservableObject {
     // MARK: - Log Management
 
     private func appendLog(serviceId: UUID, entry: LogEntry) {
-        for envIndex in environments.indices {
-            if let serviceIndex = environments[envIndex].services.firstIndex(where: { $0.id == serviceId }) {
-                environments[envIndex].services[serviceIndex].logs.append(entry)
+        guard let (envIndex, serviceIndex) = findServiceIndices(serviceId: serviceId) else { return }
 
-                // Enforce ring buffer limit (500 entries max per service)
-                if environments[envIndex].services[serviceIndex].logs.count > 500 {
-                    environments[envIndex].services[serviceIndex].logs.removeFirst()
-                }
-                return
-            }
+        environments[envIndex].services[serviceIndex].logs.append(entry)
+
+        // Enforce ring buffer limit (500 entries max per service)
+        if environments[envIndex].services[serviceIndex].logs.count > 500 {
+            environments[envIndex].services[serviceIndex].logs.removeFirst()
         }
     }
 
     func clearLogs(for serviceId: UUID) {
-        for envIndex in environments.indices {
-            if let serviceIndex = environments[envIndex].services.firstIndex(where: { $0.id == serviceId }) {
-                environments[envIndex].services[serviceIndex].logs.removeAll()
-                return
-            }
-        }
+        guard let (envIndex, serviceIndex) = findServiceIndices(serviceId: serviceId) else { return }
+        environments[envIndex].services[serviceIndex].logs.removeAll()
     }
 
     // MARK: - Process Exit Handling
 
     private func handleProcessExit(serviceId: UUID, exitCode: Int32) {
-        for envIndex in environments.indices {
-            if let serviceIndex = environments[envIndex].services.firstIndex(where: { $0.id == serviceId }) {
-                let wasExpected = environments[envIndex].services[serviceIndex].status == .stopping
+        guard let (envIndex, serviceIndex) = findServiceIndices(serviceId: serviceId) else { return }
 
-                if wasExpected {
-                    environments[envIndex].services[serviceIndex].status = .stopped
-                } else {
-                    environments[envIndex].services[serviceIndex].status = .failed
-                    environments[envIndex].services[serviceIndex].lastError = "Process exited with code \(exitCode)"
-                }
-                return
-            }
+        let wasExpected = environments[envIndex].services[serviceIndex].status == .stopping
+
+        if wasExpected {
+            environments[envIndex].services[serviceIndex].status = .stopped
+        } else {
+            environments[envIndex].services[serviceIndex].status = .failed
+            environments[envIndex].services[serviceIndex].lastError = "Process exited with code \(exitCode)"
         }
     }
 
@@ -744,6 +770,12 @@ final class AppState: ObservableObject {
 
         environments.append(newEnv)
         selectedEnvironmentId = newEnv.id
+
+        // Update cache for new services
+        for service in newServices {
+            serviceToEnvironmentCache[service.id] = newEnv.id
+        }
+
         return newEnv
     }
 
