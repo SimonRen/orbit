@@ -138,29 +138,79 @@ xcodebuild -project orbit.xcodeproj -scheme orbit test
 pkill -f "Orbit.app"; open ~/Library/Developer/Xcode/DerivedData/orbit-*/Build/Products/Debug/Orbit.app
 ```
 
+### Build Configurations
+
+| Config | Purpose | Signing | Debugger |
+|--------|---------|---------|----------|
+| **Debug** | Development | Developer ID | ✅ Allowed |
+| **Release** | Distribution | Developer ID + Timestamp | ❌ Disabled |
+
+- **Debug**: Includes `com.apple.security.get-task-allow` entitlement for debugger attachment
+- **Release**: No debug entitlements, includes secure timestamp for notarization
+
 ## Release Process
 
-### Building a Release
+### Automated Release (Recommended)
 
 ```bash
-# 1. Ensure clean working directory
-git status
+# Run the release script (builds, notarizes, creates DMG)
+./scripts/release.sh 0.3.0
+```
 
-# 2. Build release configuration
+This script will:
+1. Regenerate Xcode project
+2. Build Release configuration
+3. Submit to Apple notary service
+4. Staple the notarization ticket
+5. Create DMG with Applications symlink
+6. Notarize and staple the DMG
+
+### Prerequisites for Notarization
+
+1. **Store notarization credentials** (one-time setup):
+```bash
+xcrun notarytool store-credentials "notary" \
+  --key ~/.appstore-keys/AuthKey_XXXXXX.p8 \
+  --key-id YOUR_KEY_ID \
+  --issuer YOUR_ISSUER_ID
+```
+
+2. **Verify credentials**:
+```bash
+xcrun notarytool history --keychain-profile "notary"
+```
+
+### Manual Release
+
+```bash
+# 1. Build release
 xcodebuild -project orbit.xcodeproj -scheme orbit -configuration Release clean build
 
-# 3. The release app is at:
-ls ~/Library/Developer/Xcode/DerivedData/orbit-*/Build/Products/Release/Orbit.app
+# 2. Create ZIP and notarize
+cd ~/Library/Developer/Xcode/DerivedData/orbit-*/Build/Products/Release
+zip -r Orbit-notarize.zip Orbit.app
+xcrun notarytool submit Orbit-notarize.zip --keychain-profile "notary" --wait
 
-# 4. (Optional) Copy to Desktop for distribution
-cp -R ~/Library/Developer/Xcode/DerivedData/orbit-*/Build/Products/Release/Orbit.app ~/Desktop/
+# 3. Staple ticket
+xcrun stapler staple Orbit.app
+
+# 4. Create DMG
+mkdir dmg-staging
+cp -R Orbit.app dmg-staging/
+ln -s /Applications dmg-staging/Applications
+hdiutil create -volname "Orbit" -srcfolder dmg-staging -ov -format UDZO Orbit-vX.X.X.dmg
+rm -rf dmg-staging
+
+# 5. Notarize and staple DMG
+xcrun notarytool submit Orbit-vX.X.X.dmg --keychain-profile "notary" --wait
+xcrun stapler staple Orbit-vX.X.X.dmg
 ```
 
 ### Tagging a Release
 
 ```bash
-# Create annotated tag
-git tag -a v0.x.x -m "Release v0.x.x - Description"
+# Create tag
+git tag v0.x.x
 
 # Push tag to remote
 git push origin v0.x.x
@@ -170,8 +220,14 @@ git push origin v0.x.x
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| v0.2.9 | 2025-12-26 | Notarization support, animation fixes, local network permission |
+| v0.2.8 | 2025-12-26 | Fix service toggle stuck disabled |
+| v0.2.7 | 2025-12-26 | Fix UI freeze when enabling environments |
+| v0.2.6 | 2025-12-26 | Interface UP indicator, service filter |
+| v0.2.5 | 2025-12-26 | Fix idle CPU usage, helper version checking |
+| v0.2.4 | 2025-12-26 | Fix crash on quit |
 | v0.2.3 | 2025-12-25 | Icon fixes, performance improvements |
-| v0.2 | 2025-12-25 | Import/export, UI improvements, robustness fixes |
+| v0.2 | 2025-12-25 | Import/export, UI improvements |
 | v0.1 | 2025-12-24 | Initial release |
 
 ## Import/Export
