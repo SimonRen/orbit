@@ -1,14 +1,14 @@
-# DEV Fwd - AI-Optimized Product Requirements Document
+# Orbit - AI-Optimized Product Requirements Document
 
 ## META
 ```yaml
-project_name: "DEV Fwd"
+project_name: "Orbit"
 platform: macOS
 min_os_version: "13.0"
 language: Swift
 ui_framework: SwiftUI
 architecture: MVVM
-bundle_id: "com.devfwd.app"
+bundle_id: "com.orbit.app"
 ```
 
 ---
@@ -122,7 +122,7 @@ class AppState: ObservableObject {
 }
 ```
 
-Storage path: `~/Library/Application Support/DEV Fwd/config.json`
+Storage path: `~/Library/Application Support/Orbit/config.json`
 
 ---
 
@@ -592,7 +592,7 @@ func validateEnvironmentName(_ name: String, excluding environmentId: UUID?) -> 
 ### MainWindow
 ```yaml
 type: Window
-title: "DEV Fwd"
+title: "Orbit"
 style: macOS standard with traffic lights
 min_size: {width: 800, height: 500}
 layout: HSplitView
@@ -846,7 +846,7 @@ menu_items:
 ### HelpWindow
 ```yaml
 type: Window
-title: "DEV Fwd Help"
+title: "Orbit Help"
 size: {width: 700, height: 500}
 layout: HSplitView
 children:
@@ -866,8 +866,8 @@ topics:
   - id: "getting-started"
     title: "Getting Started"
     children:
-      - id: "what-is-devfwd"
-        title: "What is DEV Fwd?"
+      - id: "what-is-orbit"
+        title: "What is Orbit?"
       - id: "first-environment"
         title: "Creating Your First Environment"
       - id: "adding-services"
@@ -953,7 +953,7 @@ persistence:
 ### Launch
 ```yaml
 steps:
-  1. Load config from ~/Library/Application Support/DEV Fwd/config.json
+  1. Load config from ~/Library/Application Support/Orbit/config.json
   2. If file doesn't exist: create with empty environments array
   3. Parse JSON into AppState
   4. All environments start with isEnabled = false
@@ -980,7 +980,7 @@ steps:
 trigger: any change to environments or services
 steps:
   1. Serialize appState.environments to JSON (excluding runtime state)
-  2. Write to ~/Library/Application Support/DEV Fwd/config.json
+  2. Write to ~/Library/Application Support/Orbit/config.json
   3. Handle write errors gracefully (log, don't crash)
 ```
 
@@ -990,7 +990,7 @@ steps:
 
 ### Error Types
 ```swift
-enum DevFwdError: Error {
+enum OrbitError: Error {
     case interfaceAlreadyInUse(ip: String)
     case interfaceUpFailed(ip: String, reason: String)
     case interfaceDownFailed(ip: String, reason: String)
@@ -1040,9 +1040,9 @@ when_service_selected:
 ## FILE_STRUCTURE
 
 ```
-DEV Fwd/
+Orbit/
 ├── App/
-│   ├── DEVFwdApp.swift              # @main entry point
+│   ├── OrbitApp.swift               # @main entry point
 │   └── AppDelegate.swift            # NSApplicationDelegate for menubar
 ├── Models/
 │   ├── Environment.swift

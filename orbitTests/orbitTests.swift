@@ -1,7 +1,7 @@
 import XCTest
-@testable import devfwd
+@testable import Orbit
 
-final class DEV_FwdTests: XCTestCase {
+final class OrbitTests: XCTestCase {
 
     // MARK: - ValidationService Tests
 
