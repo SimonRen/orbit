@@ -69,3 +69,6 @@ credentials/
 
 # Generated Xcode project (regenerated via xcodegen)
 *.xcodeproj
+
+# Release artifacts
+releases/
