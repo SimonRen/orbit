@@ -12,8 +12,15 @@ settings:
     CURRENT_PROJECT_VERSION: "1"
     DEVELOPMENT_TEAM: "DN4YAHWP2P"
     CODE_SIGN_STYLE: Manual
-    CODE_SIGN_IDENTITY: "Developer ID Application"
     SWIFT_VERSION: "5.9"
+  configs:
+    Debug:
+      # Debug: Sign with Developer ID but allow debugging
+      CODE_SIGN_IDENTITY: "Developer ID Application"
+    Release:
+      # Release: Sign with Developer ID + timestamp for notarization
+      CODE_SIGN_IDENTITY: "Developer ID Application"
+      OTHER_CODE_SIGN_FLAGS: "--timestamp"
 
 targets:
   orbit:
@@ -46,9 +53,12 @@ targets:
         ENABLE_HARDENED_RUNTIME: YES
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
       configs:
+        Debug:
+          # Debug: Allow debugger attachment (injects com.apple.security.get-task-allow)
+          CODE_SIGN_INJECT_BASE_ENTITLEMENTS: YES
         Release:
+          # Release: No debug entitlements for notarization
           CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO
-          OTHER_CODE_SIGN_FLAGS: "--timestamp"
     entitlements:
       path: devfwd/Resources/devfwd.entitlements
       properties:
