@@ -38,7 +38,7 @@ struct SidebarView: View {
                                 .foregroundColor(Color(nsColor: .tertiaryLabelColor))
                         }
 
-                        Text("Port Forwarding")
+                        Text("Tunnels, Organized")
                             .font(.system(size: 11))
                             .foregroundColor(.secondary)
                     }
