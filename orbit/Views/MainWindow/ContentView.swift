@@ -58,53 +58,15 @@ struct ContentView: View {
 
 /// Helper to access NSWindow, adjust traffic light positions, and persist frame
 struct WindowAccessor: NSViewRepresentable {
-    private static let frameKey = "MainWindowFrame"
+    static let frameKey = "MainWindowFrame"
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
     }
 
     func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        DispatchQueue.main.async {
-            if let window = view.window {
-                // Restore saved frame if available
-                if let frameString = UserDefaults.standard.string(forKey: Self.frameKey) {
-                    let savedFrame = NSRectFromString(frameString)
-                    if savedFrame.width >= 800 && savedFrame.height >= 500 {
-                        window.setFrame(savedFrame, display: true)
-                    }
-                }
-
-                // Observe frame changes to save them (store observers for cleanup)
-                context.coordinator.resizeObserver = NotificationCenter.default.addObserver(
-                    forName: NSWindow.didResizeNotification,
-                    object: window,
-                    queue: .main
-                ) { _ in
-                    context.coordinator.scheduleFrameSave(window.frame)
-                }
-                context.coordinator.moveObserver = NotificationCenter.default.addObserver(
-                    forName: NSWindow.didMoveNotification,
-                    object: window,
-                    queue: .main
-                ) { _ in
-                    context.coordinator.scheduleFrameSave(window.frame)
-                }
-
-                // Adjust traffic light button positions
-                let buttons: [NSWindow.ButtonType] = [.closeButton, .miniaturizeButton, .zoomButton]
-                for buttonType in buttons {
-                    if let button = window.standardWindowButton(buttonType) {
-                        var frame = button.frame
-                        frame.origin.x += 4
-                        frame.origin.y -= 4
-                        button.setFrameOrigin(frame.origin)
-                    }
-                }
-            }
-        }
-        return view
+        // Use custom view for synchronous window configuration
+        WindowConfigView(coordinator: context.coordinator)
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {}
@@ -112,6 +74,7 @@ struct WindowAccessor: NSViewRepresentable {
     class Coordinator {
         var resizeObserver: NSObjectProtocol?
         var moveObserver: NSObjectProtocol?
+        var isConfigured = false
         private var saveWorkItem: DispatchWorkItem?
 
         func scheduleFrameSave(_ frame: NSRect) {
@@ -129,6 +92,75 @@ struct WindowAccessor: NSViewRepresentable {
             }
             if let observer = moveObserver {
                 NotificationCenter.default.removeObserver(observer)
+            }
+        }
+    }
+}
+
+/// Custom NSView that configures the window synchronously when added to window hierarchy
+private class WindowConfigView: NSView {
+    private let coordinator: WindowAccessor.Coordinator
+
+    init(coordinator: WindowAccessor.Coordinator) {
+        self.coordinator = coordinator
+        super.init(frame: .zero)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+
+        guard let window = self.window, !coordinator.isConfigured else { return }
+        coordinator.isConfigured = true
+
+        // Hide window temporarily to prevent visible jump during frame restoration
+        window.alphaValue = 0
+
+        // Restore saved frame if available and on a valid screen
+        if let frameString = UserDefaults.standard.string(forKey: WindowAccessor.frameKey) {
+            let savedFrame = NSRectFromString(frameString)
+            // Validate size constraints
+            if savedFrame.width >= 800 && savedFrame.height >= 500 {
+                // Validate frame is on a connected screen (handles external monitor disconnect)
+                let isOnValidScreen = NSScreen.screens.contains { $0.frame.intersects(savedFrame) }
+                if isOnValidScreen {
+                    window.setFrame(savedFrame, display: false)
+                }
+            }
+        }
+
+        // Show window after positioning
+        window.alphaValue = 1
+
+        // Observe frame changes to save them
+        coordinator.resizeObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didResizeNotification,
+            object: window,
+            queue: .main
+        ) { [weak self] _ in
+            guard let window = self?.window else { return }
+            self?.coordinator.scheduleFrameSave(window.frame)
+        }
+        coordinator.moveObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didMoveNotification,
+            object: window,
+            queue: .main
+        ) { [weak self] _ in
+            guard let window = self?.window else { return }
+            self?.coordinator.scheduleFrameSave(window.frame)
+        }
+
+        // Adjust traffic light button positions
+        let buttons: [NSWindow.ButtonType] = [.closeButton, .miniaturizeButton, .zoomButton]
+        for buttonType in buttons {
+            if let button = window.standardWindowButton(buttonType) {
+                var frame = button.frame
+                frame.origin.x += 4
+                frame.origin.y -= 4
+                button.setFrameOrigin(frame.origin)
             }
         }
     }
