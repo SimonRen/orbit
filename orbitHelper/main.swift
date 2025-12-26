@@ -1,10 +1,148 @@
 import Foundation
 import Security
+import os.log
+
+private let orphanLog = Logger(subsystem: "com.orbit.helper", category: "OrphanMonitor")
+private let helperLog = Logger(subsystem: "com.orbit.helper", category: "HelperTool")
+
+// MARK: - OrphanMonitor
+
+/// Monitors the registered app and cleans up orphaned process groups on app death
+class OrphanMonitor {
+    struct Registration {
+        let appPid: pid_t
+        let registeredAt: Date
+        var processGroups: Set<pid_t>
+    }
+
+    private var registration: Registration?
+    private var dispatchSource: DispatchSourceProcess?
+    private let queue = DispatchQueue(label: "com.orbit.helper.orphan-monitor")
+
+    // MARK: - Public API
+
+    func register(appPid: pid_t) -> (success: Bool, error: String?) {
+        return queue.sync {
+            // If different app was registered, clean it up first
+            if let existing = registration, existing.appPid != appPid {
+                orphanLog.info("Cleaning up stale registration for PID \(existing.appPid)")
+                performCleanup(for: existing)
+            }
+
+            // Verify the PID is valid
+            guard kill(appPid, 0) == 0 else {
+                return (false, "Invalid PID: process does not exist")
+            }
+
+            // Create new registration
+            registration = Registration(
+                appPid: appPid,
+                registeredAt: Date(),
+                processGroups: []
+            )
+
+            // Start watching
+            startWatching(pid: appPid)
+
+            orphanLog.info("Registered app PID \(appPid)")
+            return (true, nil)
+        }
+    }
+
+    func updateProcessGroups(_ pgids: [pid_t]) -> (success: Bool, error: String?) {
+        return queue.sync {
+            guard registration != nil else {
+                return (false, "No app registered")
+            }
+
+            registration?.processGroups = Set(pgids)
+            orphanLog.info("Updated PGIDs: \(pgids)")
+            return (true, nil)
+        }
+    }
+
+    func unregister() -> (success: Bool, error: String?) {
+        return queue.sync {
+            stopWatching()
+            registration = nil
+            orphanLog.info("Unregistered (graceful shutdown)")
+            return (true, nil)
+        }
+    }
+
+    // MARK: - Private
+
+    private func startWatching(pid: pid_t) {
+        stopWatching() // Clear any existing watch
+
+        dispatchSource = DispatchSource.makeProcessSource(
+            identifier: pid,
+            eventMask: .exit,
+            queue: queue
+        )
+
+        dispatchSource?.setEventHandler { [weak self] in
+            self?.onAppDeath()
+        }
+
+        // Don't nil dispatchSource in cancelHandler - it may already point to a new source
+        // This prevents a race condition when re-registering
+
+        dispatchSource?.resume()
+        orphanLog.info("Started watching PID \(pid)")
+    }
+
+    private func stopWatching() {
+        if let source = dispatchSource {
+            dispatchSource = nil  // Nil BEFORE cancel to prevent race with cancelHandler
+            source.cancel()
+        }
+    }
+
+    private func onAppDeath() {
+        guard let reg = registration else { return }
+
+        orphanLog.warning("App PID \(reg.appPid) died, cleaning up \(reg.processGroups.count) process groups")
+        performCleanup(for: reg)
+        registration = nil
+    }
+
+    private func performCleanup(for reg: Registration) {
+        // Phase 1: SIGTERM (graceful)
+        for pgid in reg.processGroups {
+            if pgid > 0 {
+                let result = killpg(pgid, SIGTERM)
+                if result == 0 {
+                    orphanLog.info("Sent SIGTERM to PGID \(pgid)")
+                } else {
+                    orphanLog.error("killpg SIGTERM failed for PGID \(pgid): errno=\(errno)")
+                }
+            }
+        }
+
+        // Phase 2: Wait then SIGKILL (forced)
+        let pgidsToKill = reg.processGroups
+        DispatchQueue.global().asyncAfter(deadline: .now() + 3.0) {
+            for pgid in pgidsToKill {
+                if pgid > 0 {
+                    let result = killpg(pgid, SIGKILL)
+                    if result == 0 {
+                        orphanLog.info("Sent SIGKILL to PGID \(pgid)")
+                    }
+                    // Don't log errors for SIGKILL - process may already be dead
+                }
+            }
+        }
+    }
+}
+
+// MARK: - HelperTool
 
 /// Privileged helper tool for Orbit
 /// Runs as root via launchd and handles network interface operations
 class HelperTool: NSObject, NSXPCListenerDelegate, HelperProtocol {
     private let listener: NSXPCListener
+    private let orphanMonitor = OrphanMonitor()
 
     /// Code signing requirement for the main app
     /// Matches: signed by our team ID with the correct bundle identifier
@@ -21,7 +159,7 @@ class HelperTool: NSObject, NSXPCListenerDelegate, HelperProtocol {
         let status = SecRequirementCreateWithString(requirementString, [], &requirement)
         if status != errSecSuccess {
             // Log error but continue - verification will fail safely
-            NSLog("HelperTool: Failed to create code signing requirement: \(status)")
+            helperLog.error("Failed to create code signing requirement: \(status)")
         }
         return requirement
     }()
@@ -42,7 +180,7 @@ class HelperTool: NSObject, NSXPCListenerDelegate, HelperProtocol {
     func listener(_ listener: NSXPCListener, shouldAcceptNewConnection newConnection: NSXPCConnection) -> Bool {
         // Verify the connecting process is signed by our team with correct bundle ID
         guard verifyCodeSignature(of: newConnection) else {
-            NSLog("HelperTool: Rejected connection - code signature verification failed")
+            helperLog.warning("Rejected connection - code signature verification failed")
             return false
         }
 
@@ -66,7 +204,7 @@ class HelperTool: NSObject, NSXPCListenerDelegate, HelperProtocol {
     /// Verify that the connecting process has a valid code signature from our team
     private func verifyCodeSignature(of connection: NSXPCConnection) -> Bool {
         guard let requirement = codeSigningRequirement else {
-            NSLog("HelperTool: No code signing requirement available")
+            helperLog.error("No code signing requirement available")
             return false
         }
 
@@ -83,7 +221,7 @@ class HelperTool: NSObject, NSXPCListenerDelegate, HelperProtocol {
         )
 
         guard codeStatus == errSecSuccess, let secCode = code else {
-            NSLog("HelperTool: Failed to get SecCode for PID \(pid): \(codeStatus)")
+            helperLog.error("Failed to get SecCode for PID \(pid): \(codeStatus)")
             return false
         }
 
@@ -91,7 +229,7 @@ class HelperTool: NSObject, NSXPCListenerDelegate, HelperProtocol {
         let verifyStatus = SecCodeCheckValidity(secCode, [], requirement)
 
         if verifyStatus != errSecSuccess {
-            NSLog("HelperTool: Code signature verification failed for PID \(pid): \(verifyStatus)")
+            helperLog.warning("Code signature verification failed for PID \(pid): \(verifyStatus)")
             return false
         }
 
@@ -124,6 +262,23 @@ class HelperTool: NSObject, NSXPCListenerDelegate, HelperProtocol {
 
     func getVersion(withReply reply: @escaping (String) -> Void) {
         reply(HelperConstants.helperVersion)
+    }
+
+    // MARK: - Orphan Cleanup Protocol
+
+    func registerApp(pid: Int32, withReply reply: @escaping (Bool, String?) -> Void) {
+        let result = orphanMonitor.register(appPid: pid)
+        reply(result.success, result.error)
+    }
+
+    func updateProcessGroups(_ pgids: [Int32], withReply reply: @escaping (Bool, String?) -> Void) {
+        let result = orphanMonitor.updateProcessGroups(pgids.map { pid_t($0) })
+        reply(result.success, result.error)
+    }
+
+    func unregisterApp(withReply reply: @escaping (Bool, String?) -> Void) {
+        let result = orphanMonitor.unregister()
+        reply(result.success, result.error)
     }
 
     // MARK: - Private Methods

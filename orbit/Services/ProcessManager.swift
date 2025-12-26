@@ -46,26 +46,9 @@ final class ProcessManager {
         // Resolve variables in command
         let resolvedCommand = VariableResolver.resolve(service.command, interfaces: interfaces)
 
-        // Get our app's PID for orphan detection
-        let appPid = ProcessInfo.processInfo.processIdentifier
-
-        // Wrap command with:
-        // 1. trap to kill process group on exit (handles graceful termination)
-        // 2. background monitor that watches parent PID and kills group if parent dies (handles force-quit/crash)
-        // Note: We use 'kill 0' which sends signal to entire process group
-        // The monitor polls every 0.5s for faster cleanup on parent death
-        // We escape single quotes in the command to prevent bash injection
-        let escapedCommand = resolvedCommand.replacingOccurrences(of: "'", with: "'\\''")
-        let wrappedCommand = """
-        trap 'kill 0 2>/dev/null' EXIT TERM INT HUP
-        (while kill -0 \(appPid) 2>/dev/null; do sleep 0.5; done; kill 0 2>/dev/null) &
-        _MONITOR_PID=$!
-        eval '\(escapedCommand)'
-        _EXIT_CODE=$?
-        kill $_MONITOR_PID 2>/dev/null
-        exit $_EXIT_CODE
-        """
-        process.arguments = ["-c", wrappedCommand]
+        // No shell wrapper needed - helper daemon monitors app and kills orphans on crash
+        // See OrphanRegistrar for the registration with the helper
+        process.arguments = ["-c", resolvedCommand]
         process.currentDirectoryURL = FileManager.default.homeDirectoryForCurrentUser
 
         // Setup environment
@@ -117,13 +100,19 @@ final class ProcessManager {
 
             let pid = process.processIdentifier
 
-            // Put process in its own process group for reliable cleanup
-            // setpgid(pid, pid) creates a new process group with PGID == PID
-            setpgid(pid, pid)
+            // Swift's Process uses POSIX_SPAWN_SETPGROUP internally, which atomically
+            // creates a new process group with PGID == PID before exec. No need for
+            // explicit setpgid() call (which would fail with EACCES anyway since
+            // the child has already exec'd by the time process.run() returns).
             processGroups[service.id] = pid
 
             processes[service.id] = process
             pipes[service.id] = (stdoutPipe, stderrPipe)
+
+            // Notify OrphanRegistrar so helper can clean up if app crashes
+            Task { @MainActor in
+                OrphanRegistrar.shared.addProcessGroup(pid)
+            }
 
             // Log the startup
             let startEntry = LogEntry(
@@ -276,6 +265,13 @@ final class ProcessManager {
     }
 
     private func cleanup(serviceId: UUID) {
+        // Notify OrphanRegistrar that this process group is gone
+        if let pgid = processGroups[serviceId] {
+            Task { @MainActor in
+                OrphanRegistrar.shared.removeProcessGroup(pgid)
+            }
+        }
+
         processes.removeValue(forKey: serviceId)
         processGroups.removeValue(forKey: serviceId)
         pipes.removeValue(forKey: serviceId)
