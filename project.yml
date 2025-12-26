@@ -8,7 +8,7 @@ options:
 
 settings:
   base:
-    MARKETING_VERSION: "0.2.9"
+    MARKETING_VERSION: "0.3.0"
     CURRENT_PROJECT_VERSION: "1"
     DEVELOPMENT_TEAM: "DN4YAHWP2P"
     CODE_SIGN_STYLE: Manual
@@ -27,7 +27,7 @@ targets:
     type: application
     platform: macOS
     sources:
-      - path: devfwd
+      - path: orbit
         excludes:
           - "**/.DS_Store"
           - "**/LaunchDaemons/**"
@@ -35,7 +35,7 @@ targets:
       - name: Copy LaunchDaemons
         script: |
           mkdir -p "${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Library/LaunchDaemons"
-          cp "${SRCROOT}/devfwd/Resources/LaunchDaemons/com.orbit.helper.plist" "${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Library/LaunchDaemons/"
+          cp "${SRCROOT}/orbit/Resources/LaunchDaemons/com.orbit.helper.plist" "${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Library/LaunchDaemons/"
         basedOnDependencyAnalysis: false
     dependencies:
       - target: com.orbit.helper
@@ -48,7 +48,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.orbit.app
         PRODUCT_NAME: Orbit
-        INFOPLIST_FILE: devfwd/Resources/Info.plist
+        INFOPLIST_FILE: orbit/Resources/Info.plist
         GENERATE_INFOPLIST_FILE: NO
         ENABLE_HARDENED_RUNTIME: YES
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
@@ -60,7 +60,7 @@ targets:
           # Release: No debug entitlements for notarization
           CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO
     entitlements:
-      path: devfwd/Resources/devfwd.entitlements
+      path: orbit/Resources/orbit.entitlements
       properties:
         com.apple.security.app-sandbox: false
         com.apple.security.automation.apple-events: true
@@ -69,7 +69,7 @@ targets:
     type: tool
     platform: macOS
     sources:
-      - path: devfwdHelper
+      - path: orbitHelper
         excludes:
           - "**/.DS_Store"
           - "launchd.plist"
@@ -80,9 +80,9 @@ targets:
         SKIP_INSTALL: YES
         ENABLE_HARDENED_RUNTIME: YES
         CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO
-        INFOPLIST_FILE: devfwdHelper/Info.plist
+        INFOPLIST_FILE: orbitHelper/Info.plist
         CREATE_INFOPLIST_SECTION_IN_BINARY: YES
-        OTHER_LDFLAGS: "-sectcreate __TEXT __launchd_plist $(SRCROOT)/devfwdHelper/launchd.plist"
+        OTHER_LDFLAGS: "-sectcreate __TEXT __launchd_plist $(SRCROOT)/orbitHelper/launchd.plist"
       configs:
         Release:
           OTHER_CODE_SIGN_FLAGS: "--timestamp"
@@ -91,15 +91,18 @@ targets:
     type: bundle.unit-test
     platform: macOS
     sources:
-      - path: devfwdTests
+      - path: orbitTests
     dependencies:
       - target: orbit
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.orbit.app.tests
         GENERATE_INFOPLIST_FILE: YES
-        CODE_SIGN_STYLE: Automatic
-        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "Developer ID Application"
+        DEVELOPMENT_TEAM: "DN4YAHWP2P"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Orbit.app/Contents/MacOS/Orbit"
+        BUNDLE_LOADER: "$(TEST_HOST)"
 
 schemes:
   orbit:
