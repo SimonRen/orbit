@@ -10,8 +10,11 @@ This project uses XcodeGen to generate the Xcode project from `project.yml`:
 # Generate Xcode project (required after adding/removing files)
 xcodegen generate
 
-# Build the app
+# Build the app (Debug - for development)
 xcodebuild -project orbit.xcodeproj -scheme orbit -configuration Debug build
+
+# Build the app (Release - for distribution)
+xcodebuild -project orbit.xcodeproj -scheme orbit -configuration Release build
 
 # Run tests
 xcodebuild -project orbit.xcodeproj -scheme orbit test
@@ -21,6 +24,27 @@ pkill -f "Orbit.app"; open ~/Library/Developer/Xcode/DerivedData/orbit-*/Build/P
 ```
 
 The generated `*.xcodeproj` is gitignored - always regenerate with `xcodegen generate`.
+
+## Build Configurations
+
+| Config | Purpose | Key Settings |
+|--------|---------|--------------|
+| **Debug** | Development | `CODE_SIGN_INJECT_BASE_ENTITLEMENTS: YES` (allows debugger) |
+| **Release** | Distribution | `CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO` + `--timestamp` (notarization-ready) |
+
+## Release Process
+
+```bash
+# Automated release (builds, notarizes, creates DMG)
+./scripts/release.sh 0.x.x
+
+# Or manually:
+xcodebuild -project orbit.xcodeproj -scheme orbit -configuration Release clean build
+xcrun notarytool submit Orbit.zip --keychain-profile "notary" --wait
+xcrun stapler staple Orbit.app
+```
+
+Notarization credentials are stored in Keychain as profile "notary".
 
 ## Architecture Overview
 
