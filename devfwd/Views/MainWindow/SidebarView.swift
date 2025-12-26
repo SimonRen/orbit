@@ -13,18 +13,56 @@ struct SidebarView: View {
     @State private var importError: ImportError?
     @State private var showingImportError = false
 
+    private var appVersion: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Header (with space for traffic lights) - draggable
+            // App header with branding
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 8) {
+                    // App icon
+                    Image(nsImage: NSApp.applicationIconImage)
+                        .resizable()
+                        .frame(width: 32, height: 32)
+                        .cornerRadius(6)
+
+                    VStack(alignment: .leading, spacing: 1) {
+                        HStack(alignment: .firstTextBaseline, spacing: 6) {
+                            Text("Orbit")
+                                .font(.system(size: 15, weight: .semibold))
+
+                            Text("v\(appVersion)")
+                                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                                .foregroundColor(Color(nsColor: .tertiaryLabelColor))
+                        }
+
+                        Text("Port Forwarding")
+                            .font(.system(size: 11))
+                            .foregroundColor(.secondary)
+                    }
+
+                    Spacer()
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 26)  // Space for traffic lights
+            .padding(.bottom, 16)
+            .background(WindowDragArea())
+
+            Divider()
+                .padding(.horizontal, 12)
+
+            // Section header
             Text("ENVIRONMENTS")
                 .font(.caption)
                 .fontWeight(.semibold)
                 .foregroundColor(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 16)
-                .padding(.top, 8)
+                .padding(.top, 12)
                 .padding(.bottom, 8)
-                .background(WindowDragArea())
 
             // Environment list
             ScrollView {

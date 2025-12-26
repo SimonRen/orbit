@@ -343,8 +343,7 @@ struct EnvironmentMenuRow: View {
                     get: { environment.isEnabled },
                     set: { _ in onToggle() }
                 ))
-                .toggleStyle(.switch)
-                .controlSize(.mini)
+                .toggleStyle(AccentToggleStyle())
             }
         }
         .padding(.horizontal, 12)

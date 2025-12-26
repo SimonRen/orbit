@@ -45,6 +45,7 @@ struct DetailView: View {
     @State private var serviceToDelete: Service?
     @State private var activeInterfaces: Set<String> = []
     @State private var serviceFilter: ServiceFilter = .all
+    @State private var isFullScreen: Bool = false
 
     private var environment: DevEnvironment? {
         appState.environments.first { $0.id == environmentId }
@@ -87,6 +88,16 @@ struct DetailView: View {
                     if env.isEnabled {
                         refreshInterfaceStatus()
                     }
+                    // Check initial fullscreen state
+                    if let window = NSApp.mainWindow {
+                        isFullScreen = window.styleMask.contains(.fullScreen)
+                    }
+                }
+                .onReceive(NotificationCenter.default.publisher(for: NSWindow.didEnterFullScreenNotification)) { _ in
+                    isFullScreen = true
+                }
+                .onReceive(NotificationCenter.default.publisher(for: NSWindow.didExitFullScreenNotification)) { _ in
+                    isFullScreen = false
                 }
                 .onChange(of: environmentId) { newId in
                     // Check if there are unsaved changes before switching
@@ -313,7 +324,7 @@ struct DetailView: View {
             .disabled(isTransitioning)
         }
         .padding(.horizontal, 20)
-        .padding(.top, -10)
+        .padding(.top, isFullScreen ? 26 : 6)  // More space in fullscreen for menu bar
         .padding(.bottom, 14)
         .background(WindowDragArea())
     }
@@ -361,28 +372,38 @@ struct DetailView: View {
                     }
                 }
 
-                // Add interface button (always present to preserve layout)
-                Divider()
-                    .opacity(isActive || isTransitioning ? 0 : 1)
-
-                Button {
-                    let newIP = suggestNextIP()
-                    editedInterfaces.append(newIP)
-                    checkForChanges()
-                } label: {
+                // Add interface button or disabled hint
+                if isActive || isTransitioning {
+                    Divider()
                     HStack {
-                        Image(systemName: "plus.circle.fill")
-                            .foregroundColor(.accentColor)
-                        Text("Add Interface")
-                            .foregroundColor(.accentColor)
+                        Image(systemName: "info.circle")
+                            .foregroundColor(.secondary)
+                        Text("Stop environment to edit")
+                            .foregroundColor(.secondary)
+                            .font(.subheadline)
                         Spacer()
                     }
                     .padding(.horizontal, 12)
-                    .padding(.vertical, 10)
+                    .padding(.vertical, 8)
+                } else {
+                    Divider()
+                    Button {
+                        let newIP = suggestNextIP()
+                        editedInterfaces.append(newIP)
+                        checkForChanges()
+                    } label: {
+                        HStack {
+                            Image(systemName: "plus.circle.fill")
+                                .foregroundColor(.accentColor)
+                            Text("Add Interface")
+                                .foregroundColor(.accentColor)
+                            Spacer()
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 10)
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
-                .opacity(isActive || isTransitioning ? 0 : 1)
-                .disabled(isActive || isTransitioning)
             }
             .background(
                 RoundedRectangle(cornerRadius: 8)

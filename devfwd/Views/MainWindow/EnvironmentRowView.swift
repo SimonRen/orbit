@@ -1,5 +1,29 @@
 import SwiftUI
 
+/// Custom toggle style that shows accent color when on
+struct AccentToggleStyle: ToggleStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack {
+            configuration.label
+
+            RoundedRectangle(cornerRadius: 8)
+                .fill(configuration.isOn ? Color.accentColor : Color(nsColor: .separatorColor))
+                .frame(width: 32, height: 18)
+                .overlay(
+                    Circle()
+                        .fill(.white)
+                        .shadow(radius: 1)
+                        .padding(2)
+                        .offset(x: configuration.isOn ? 7 : -7)
+                )
+                .animation(.easeInOut(duration: 0.15), value: configuration.isOn)
+                .onTapGesture {
+                    configuration.isOn.toggle()
+                }
+        }
+    }
+}
+
 /// A single row in the environments sidebar
 struct EnvironmentRowView: View {
     let environment: DevEnvironment
@@ -43,10 +67,10 @@ struct EnvironmentRowView: View {
                 get: { environment.isEnabled },
                 set: { onToggle($0) }
             ))
-            .toggleStyle(.switch)
-            .controlSize(.mini)
+            .toggleStyle(AccentToggleStyle())
             .labelsHidden()
             .disabled(isToggleDisabled || environment.isTransitioning)
+            .opacity(isToggleDisabled || environment.isTransitioning ? 0.5 : 1.0)
         }
         .padding(.vertical, 6)
         .padding(.horizontal, 8)

@@ -146,9 +146,9 @@ final class ProcessManager {
     /// Stops a process with graceful SIGTERM then forced SIGKILL
     /// - Parameters:
     ///   - serviceId: The service ID whose process to stop
-    ///   - timeout: Seconds to wait before SIGKILL (default 5)
+    ///   - timeout: Seconds to wait before SIGKILL (default 3)
     ///   - completion: Called when process is fully stopped
-    func stopProcess(for serviceId: UUID, timeout: TimeInterval = 5.0, completion: @escaping () -> Void) {
+    func stopProcess(for serviceId: UUID, timeout: TimeInterval = 3.0, completion: @escaping () -> Void) {
         lock.lock()
         guard let process = processes[serviceId] else {
             lock.unlock()
@@ -175,14 +175,21 @@ final class ProcessManager {
         onLogOutput?(serviceId, stopEntry)
 
         // Kill entire process group with SIGTERM (negative PID kills the group)
-        // This is more reliable than killing individual processes
         killpg(pgid, SIGTERM)
 
         // Also terminate the main process directly (belt and suspenders)
         process.terminate()
 
-        // Wait for graceful shutdown, then force kill
-        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + timeout) { [weak self] in
+        // Poll for process exit - complete early if process dies quickly
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let startTime = Date()
+            let pollInterval: TimeInterval = 0.1
+
+            // Poll until process exits or timeout reached
+            while process.isRunning && Date().timeIntervalSince(startTime) < timeout {
+                Thread.sleep(forTimeInterval: pollInterval)
+            }
+
             self?.lock.lock()
             defer { self?.lock.unlock() }
 
@@ -197,10 +204,15 @@ final class ProcessManager {
                 // Force kill entire process group
                 killpg(pgid, SIGKILL)
                 kill(pid, SIGKILL)
+
+                // Brief wait for SIGKILL to take effect
+                Thread.sleep(forTimeInterval: 0.1)
             }
 
             self?.cleanup(serviceId: serviceId)
-            completion()
+            DispatchQueue.main.async {
+                completion()
+            }
         }
     }
 

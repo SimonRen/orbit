@@ -481,8 +481,8 @@ final class AppState: ObservableObject {
         environments[environmentIndex].services[serviceIndex].status = .starting
 
         if processManager.spawnProcess(for: service, interfaces: interfaces) {
-            // Schedule transition to running after 3 seconds if still running
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) { [weak self] in
+            // Schedule transition to running after 500ms if still running
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
                 guard let self = self else { return }
 
                 // Look up by IDs, not captured indices
@@ -528,8 +528,8 @@ final class AppState: ObservableObject {
             if let serviceIndex = environments[envIndex].services.firstIndex(where: { $0.id == serviceId }) {
                 environments[envIndex].services[serviceIndex].logs.append(entry)
 
-                // Enforce ring buffer limit (10k entries)
-                if environments[envIndex].services[serviceIndex].logs.count > 10000 {
+                // Enforce ring buffer limit (500 entries max per service)
+                if environments[envIndex].services[serviceIndex].logs.count > 500 {
                     environments[envIndex].services[serviceIndex].logs.removeFirst()
                 }
                 return
