@@ -18,6 +18,8 @@
 	<string>1.0</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Orbit needs local network access to connect to development services like Kubernetes clusters, databases, and other internal resources.</string>
 	<key>SMPrivilegedExecutables</key>
 	<dict>
 		<key>com.orbit.helper</key>

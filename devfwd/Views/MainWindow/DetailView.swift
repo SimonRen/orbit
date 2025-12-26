@@ -4,6 +4,22 @@ import SwiftUI
 enum ServiceFilter: String, CaseIterable {
     case all = "All"
     case enabled = "Enabled"
+
+    /// Load filter for a specific environment from UserDefaults
+    static func load(for environmentId: UUID) -> ServiceFilter {
+        let key = "serviceFilter_\(environmentId.uuidString)"
+        if let rawValue = UserDefaults.standard.string(forKey: key),
+           let filter = ServiceFilter(rawValue: rawValue) {
+            return filter
+        }
+        return .all
+    }
+
+    /// Save filter for a specific environment to UserDefaults
+    func save(for environmentId: UUID) {
+        let key = "serviceFilter_\(environmentId.uuidString)"
+        UserDefaults.standard.set(self.rawValue, forKey: key)
+    }
 }
 
 /// Detail view showing the selected environment's configuration
@@ -67,6 +83,7 @@ struct DetailView: View {
                 .onAppear {
                     loadEnvironmentData(env)
                     previousEnvironmentId = environmentId
+                    serviceFilter = ServiceFilter.load(for: environmentId)
                     if env.isEnabled {
                         refreshInterfaceStatus()
                     }
@@ -84,6 +101,7 @@ struct DetailView: View {
                         loadEnvironmentData(newEnv)
                         previousIsEnabled = newEnv.isEnabled
                         isEditingName = false
+                        serviceFilter = ServiceFilter.load(for: newId)
                     }
                     previousEnvironmentId = newId
                 }
@@ -125,6 +143,9 @@ struct DetailView: View {
                 } message: {
                     Text("You have unsaved changes. Would you like to save them before enabling this environment?")
                 }
+                .onChange(of: serviceFilter) { newFilter in
+                    newFilter.save(for: environmentId)
+                }
                 .alert("Unsaved Changes", isPresented: $showingUnsavedChangesOnSwitch) {
                     Button("Save") {
                         // Save to the previous environment (not the new one)
@@ -139,6 +160,7 @@ struct DetailView: View {
                             loadEnvironmentData(newEnv)
                             previousIsEnabled = newEnv.isEnabled
                             isEditingName = false
+                            serviceFilter = ServiceFilter.load(for: environmentId)
                         }
                         previousEnvironmentId = environmentId
                     }
@@ -148,6 +170,7 @@ struct DetailView: View {
                             loadEnvironmentData(newEnv)
                             previousIsEnabled = newEnv.isEnabled
                             isEditingName = false
+                            serviceFilter = ServiceFilter.load(for: environmentId)
                         }
                         previousEnvironmentId = environmentId
                     }
@@ -338,27 +361,28 @@ struct DetailView: View {
                     }
                 }
 
-                // Add interface button
-                if !isActive && !isTransitioning {
-                    Divider()
+                // Add interface button (always present to preserve layout)
+                Divider()
+                    .opacity(isActive || isTransitioning ? 0 : 1)
 
-                    Button {
-                        let newIP = suggestNextIP()
-                        editedInterfaces.append(newIP)
-                        checkForChanges()
-                    } label: {
-                        HStack {
-                            Image(systemName: "plus.circle.fill")
-                                .foregroundColor(.accentColor)
-                            Text("Add Interface")
-                                .foregroundColor(.accentColor)
-                            Spacer()
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 10)
+                Button {
+                    let newIP = suggestNextIP()
+                    editedInterfaces.append(newIP)
+                    checkForChanges()
+                } label: {
+                    HStack {
+                        Image(systemName: "plus.circle.fill")
+                            .foregroundColor(.accentColor)
+                        Text("Add Interface")
+                            .foregroundColor(.accentColor)
+                        Spacer()
                     }
-                    .buttonStyle(.plain)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
                 }
+                .buttonStyle(.plain)
+                .opacity(isActive || isTransitioning ? 0 : 1)
+                .disabled(isActive || isTransitioning)
             }
             .background(
                 RoundedRectangle(cornerRadius: 8)
@@ -554,15 +578,16 @@ struct InterfaceRowCompact: View {
 
             Spacer()
 
-            if canRemove && !isDisabled {
-                Button(action: onRemove) {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(.secondary)
-                        .imageScale(.medium)
-                }
-                .buttonStyle(.plain)
-                .help("Remove interface")
+            // Always render to preserve layout, hide when not available
+            Button(action: onRemove) {
+                Image(systemName: "xmark.circle.fill")
+                    .foregroundColor(.secondary)
+                    .imageScale(.medium)
             }
+            .buttonStyle(.plain)
+            .help("Remove interface")
+            .opacity(canRemove && !isDisabled ? 1 : 0)
+            .disabled(!canRemove || isDisabled)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)

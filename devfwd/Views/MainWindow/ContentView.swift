@@ -15,7 +15,9 @@ struct ContentView: View {
             // Detail view
             if let selectedId = appState.selectedEnvironmentId {
                 DetailView(environmentId: selectedId)
-                    .id(selectedId)  // Force view recreation when selection changes
+                    .id(selectedId)  // Required to force view recreation and reset @State
+                    .transition(.identity)  // No transition animation
+                    .transaction { $0.animation = nil }  // Prevent animation jump during selection change
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 EmptyDetailView()

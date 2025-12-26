@@ -208,7 +208,12 @@ final class HelperClient: ObservableObject {
         completion(proxy)
 
         // Invalidate old connection before storing new one
-        self.connection?.invalidate()
+        // Clear handlers first to prevent them from being called during intentional invalidation
+        if let oldConnection = self.connection {
+            oldConnection.invalidationHandler = nil
+            oldConnection.interruptionHandler = nil
+            oldConnection.invalidate()
+        }
         self.connection = connection
     }
 }

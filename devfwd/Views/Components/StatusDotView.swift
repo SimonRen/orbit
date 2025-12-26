@@ -26,6 +26,7 @@ struct StatusDotView: View {
             .fill(color)
             .frame(width: 10, height: 10)
             .modifier(PulseAnimationModifier(isActive: shouldPulse))
+            .drawingGroup()  // Rasterize to prevent animation leakage during view transitions
     }
 }
 
@@ -40,7 +41,7 @@ struct PulseAnimationModifier: ViewModifier {
             .animation(
                 isActive
                     ? .easeInOut(duration: 0.8).repeatForever(autoreverses: true)
-                    : .default,
+                    : nil,  // No animation when not pulsing to prevent position jumps
                 value: isPulsing
             )
             .onAppear {
