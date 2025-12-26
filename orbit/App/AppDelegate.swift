@@ -29,6 +29,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         setupPopover()
         observeStateChanges()
         setupWindowObservation()
+
+        // Register with helper for orphan monitoring
+        Task {
+            await OrphanRegistrar.shared.register()
+        }
     }
 
     // MARK: - NSApplicationDelegate
@@ -41,6 +46,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         // AppKit guarantees this is called on main thread
         return MainActor.assumeIsolated {
             guard appState?.hasActiveEnvironments ?? false else {
+                // No active environments - unregister and quit immediately
+                Task {
+                    await OrphanRegistrar.shared.unregister()
+                }
                 return .terminateNow
             }
 
@@ -55,7 +64,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             if alert.runModal() == .alertFirstButtonReturn {
                 // User confirmed - stop all and quit
                 appState?.stopAllEnvironments {
-                    NSApp.reply(toApplicationShouldTerminate: true)
+                    Task { @MainActor in
+                        // Unregister AFTER processes stopped
+                        await OrphanRegistrar.shared.unregister()
+                        NSApp.reply(toApplicationShouldTerminate: true)
+                    }
                 }
                 return .terminateLater
             } else {

@@ -18,6 +18,24 @@ protocol HelperProtocol {
     /// Check if the helper is running and responsive
     /// - Parameter reply: Callback with the helper version string
     func getVersion(withReply reply: @escaping (String) -> Void)
+
+    // MARK: - Orphan Cleanup
+
+    /// Register this app for orphan process monitoring
+    /// - Parameters:
+    ///   - pid: The app's process ID
+    ///   - reply: Callback with success status and optional error message
+    func registerApp(pid: Int32, withReply reply: @escaping (Bool, String?) -> Void)
+
+    /// Update the list of process groups to clean up if the app dies
+    /// - Parameters:
+    ///   - pgids: Array of process group IDs
+    ///   - reply: Callback with success status and optional error message
+    func updateProcessGroups(_ pgids: [Int32], withReply reply: @escaping (Bool, String?) -> Void)
+
+    /// Unregister from orphan monitoring (graceful shutdown)
+    /// - Parameter reply: Callback with success status and optional error message
+    func unregisterApp(withReply reply: @escaping (Bool, String?) -> Void)
 }
 
 /// Protocol for the app to receive callbacks from helper
@@ -30,5 +48,5 @@ protocol HelperProgressProtocol {
 /// Helper identification constants
 enum HelperConstants {
     static let machServiceName = "com.orbit.helper"
-    static let helperVersion = "1.0.0"
+    static let helperVersion = "1.2.0"  // Bumped for orphan cleanup feature
 }

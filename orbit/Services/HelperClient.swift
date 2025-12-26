@@ -182,6 +182,101 @@ final class HelperClient: ObservableObject {
         }
     }
 
+    // MARK: - Orphan Monitoring
+
+    /// Register this app for orphan process monitoring
+    func registerApp(pid: Int32) async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            let resumed = OnceFlag()
+
+            getHelperProxy { proxy in
+                guard let proxy = proxy else {
+                    if resumed.trySet() {
+                        continuation.resume(throwing: HelperClientError.connectionFailed)
+                    }
+                    return
+                }
+
+                proxy.registerApp(pid: pid) { success, errorMessage in
+                    guard resumed.trySet() else { return }
+                    if success {
+                        continuation.resume()
+                    } else {
+                        continuation.resume(throwing: HelperClientError.operationFailed(
+                            errorMessage ?? "Failed to register app"
+                        ))
+                    }
+                }
+            } errorHandler: {
+                if resumed.trySet() {
+                    continuation.resume(throwing: HelperClientError.connectionFailed)
+                }
+            }
+        }
+    }
+
+    /// Update the list of process groups to clean up if the app dies
+    func updateProcessGroups(_ pgids: [Int32]) async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            let resumed = OnceFlag()
+
+            getHelperProxy { proxy in
+                guard let proxy = proxy else {
+                    if resumed.trySet() {
+                        continuation.resume(throwing: HelperClientError.connectionFailed)
+                    }
+                    return
+                }
+
+                proxy.updateProcessGroups(pgids) { success, errorMessage in
+                    guard resumed.trySet() else { return }
+                    if success {
+                        continuation.resume()
+                    } else {
+                        continuation.resume(throwing: HelperClientError.operationFailed(
+                            errorMessage ?? "Failed to update process groups"
+                        ))
+                    }
+                }
+            } errorHandler: {
+                if resumed.trySet() {
+                    continuation.resume(throwing: HelperClientError.connectionFailed)
+                }
+            }
+        }
+    }
+
+    /// Unregister from orphan monitoring (graceful shutdown)
+    func unregisterApp() async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            let resumed = OnceFlag()
+
+            getHelperProxy { proxy in
+                guard let proxy = proxy else {
+                    if resumed.trySet() {
+                        continuation.resume(throwing: HelperClientError.connectionFailed)
+                    }
+                    return
+                }
+
+                proxy.unregisterApp { success, errorMessage in
+                    guard resumed.trySet() else { return }
+                    if success {
+                        continuation.resume()
+                    } else {
+                        continuation.resume(throwing: HelperClientError.operationFailed(
+                            errorMessage ?? "Failed to unregister app"
+                        ))
+                    }
+                }
+            } errorHandler: {
+                if resumed.trySet() {
+                    continuation.resume(throwing: HelperClientError.connectionFailed)
+                }
+            }
+        }
+    }
+
     // MARK: - Private Methods
 
     private func getHelperProxy(
