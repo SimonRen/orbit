@@ -217,16 +217,32 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     @objc private func showMainWindow(_ sender: Any?) {
         closePopover()
+        activateAppWithDockToggle()
+    }
 
-        // Show in Dock before activating
+    /// Workaround for macOS bug where programmatic activation doesn't fully activate the app
+    /// Solution: briefly activate the Dock, then reactivate our app - forces proper activation cycle
+    /// Used by: Swiftness, Better Blocker, and other menubar apps
+    private func activateAppWithDockToggle() {
+        // Step 1: Briefly activate the Dock to force a proper activation cycle
+        let dockActivated = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.dock").first?.activate(options: []) ?? false
+
+        // Step 2: After delay, reactivate our app (use shorter delay if Dock activation failed)
+        let delay = dockActivated ? 200 : 50
+        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(delay)) {
+            Self.activateAndShowWindow()
+        }
+    }
+
+    /// Shared logic for activating app and showing main window
+    static func activateAndShowWindow() {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
 
         // Find existing window or create new one
-        if let window = NSApp.windows.first(where: { $0.canBecomeMain }) {
+        if let window = NSApp.windows.first(where: { $0.canBecomeMain && !$0.isKind(of: NSPanel.self) }) {
             window.makeKeyAndOrderFront(nil)
         } else {
-            // No window exists, use coordinator to open one
             WindowCoordinator.shared.openMainWindow?()
         }
     }
@@ -278,14 +294,13 @@ struct StatusMenuView: View {
             // Show Window button
             MenuRowButton(label: "Show Window") {
                 onDismiss()
+                // Use Dock toggle hack for proper window activation
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    // Show in Dock before activating
-                    NSApp.setActivationPolicy(.regular)
-                    NSApp.activate(ignoringOtherApps: true)
-                    if let window = NSApp.windows.first(where: { $0.canBecomeMain }) {
-                        window.makeKeyAndOrderFront(nil)
-                    } else {
-                        WindowCoordinator.shared.openMainWindow?()
+                    // Briefly activate the Dock to force a proper activation cycle
+                    let dockActivated = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.dock").first?.activate(options: []) ?? false
+                    let delay = dockActivated ? 200 : 50
+                    DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(delay)) {
+                        AppDelegate.activateAndShowWindow()
                     }
                 }
             }
