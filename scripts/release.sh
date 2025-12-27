@@ -10,6 +10,7 @@ set -e
 # - Notarization profile "notary" in Keychain
 
 VERSION=${1:-$(grep 'MARKETING_VERSION' project.yml | head -1 | sed 's/.*"\(.*\)"/\1/')}
+BUILD_NUMBER=$(grep 'CURRENT_PROJECT_VERSION' project.yml | head -1 | sed 's/.*"\(.*\)"/\1/')
 RELEASES_DIR="releases"
 DMG_NAME="Orbit-v${VERSION}.dmg"
 APPCAST_FILE="docs/appcast.xml"
@@ -35,7 +36,7 @@ find_sparkle_bin() {
     return 1
 }
 
-echo "=== Building Orbit v${VERSION} ==="
+echo "=== Building Orbit v${VERSION} (build ${BUILD_NUMBER}) ==="
 
 # Regenerate Xcode project
 echo "→ Regenerating Xcode project..."
@@ -145,9 +146,10 @@ else
         NOTES_URL="https://simonren.github.io/orbit/release-notes/${VERSION}.html"
 
         # Create new item XML
+        # sparkle:version = CFBundleVersion (build number), sparkle:shortVersionString = marketing version
         NEW_ITEM="        <item>
             <title>Version ${VERSION}</title>
-            <sparkle:version>${VERSION}</sparkle:version>
+            <sparkle:version>${BUILD_NUMBER}</sparkle:version>
             <sparkle:shortVersionString>${VERSION}</sparkle:shortVersionString>
             <sparkle:releaseNotesLink>${NOTES_URL}</sparkle:releaseNotesLink>
             <pubDate>${PUB_DATE}</pubDate>
@@ -159,10 +161,10 @@ else
                 type=\"application/octet-stream\" />
         </item>"
 
-        # Insert after <!-- Latest version first --> comment (or after <language>en</language>)
-        if grep -q "<!-- Latest version first -->" "$APPCAST_FILE"; then
-            # Use perl for multi-line replacement
-            perl -i -pe "s|(<!-- Latest version first -->)|\$1\n${NEW_ITEM}|" "$APPCAST_FILE"
+        # Insert after <!-- Latest version first ... --> comment (or after <language>en</language>)
+        if grep -q "<!-- Latest version first" "$APPCAST_FILE"; then
+            # Use perl for multi-line replacement - match the comment and insert after it
+            perl -i -pe "s|(<!-- Latest version first[^>]*-->)|\$1\n${NEW_ITEM}|" "$APPCAST_FILE"
         else
             # Fallback: insert after <language>en</language>
             perl -i -pe "s|(<language>en</language>)|\$1\n\n        <!-- Latest version first -->\n${NEW_ITEM}|" "$APPCAST_FILE"
