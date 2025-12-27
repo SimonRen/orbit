@@ -20,6 +20,14 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Orbit needs local network access to connect to development services like Kubernetes clusters, databases, and other internal resources.</string>
+	<!-- Sparkle Auto-Update Configuration -->
+	<key>SUFeedURL</key>
+	<string>https://simonren.github.io/orbit/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>PLACEHOLDER_PUBLIC_KEY</string>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+
 	<key>SMPrivilegedExecutables</key>
 	<dict>
 		<key>com.orbit.helper</key>
