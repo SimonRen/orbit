@@ -185,11 +185,16 @@ else
             padding: 20px;
             max-width: 600px;
             line-height: 1.5;
+            background: #ffffff;
             color: #333;
         }
-        h2 { color: #1a1a1a; border-bottom: 1px solid #eee; padding-bottom: 8px; }
+        h2 { color: #1a1a1a; border-bottom: 1px solid #ddd; padding-bottom: 8px; }
         ul { padding-left: 20px; }
         li { margin: 8px 0; }
+        @media (prefers-color-scheme: dark) {
+            body { background: #2d2d2d; color: #e0e0e0; }
+            h2 { color: #ffffff; border-bottom-color: #555; }
+        }
     </style>
 </head>
 <body>
