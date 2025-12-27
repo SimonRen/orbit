@@ -9,8 +9,22 @@ set -e
 # - Sparkle EdDSA key in Keychain (run generate_keys once)
 # - Notarization profile "notary" in Keychain
 
-VERSION=${1:-$(grep 'MARKETING_VERSION' project.yml | head -1 | sed 's/.*"\(.*\)"/\1/')}
-BUILD_NUMBER=$(grep 'CURRENT_PROJECT_VERSION' project.yml | head -1 | sed 's/.*"\(.*\)"/\1/')
+# Read versions from project.yml using yq
+PROJECT_VERSION=$(yq '.settings.base.MARKETING_VERSION' project.yml | tr -d '"')
+BUILD_NUMBER=$(yq '.settings.base.CURRENT_PROJECT_VERSION' project.yml | tr -d '"')
+VERSION=${1:-$PROJECT_VERSION}
+
+# Version check: ensure project.yml matches the release version
+if [[ "$VERSION" != "$PROJECT_VERSION" ]]; then
+    echo "ERROR: Version mismatch!"
+    echo "  Release version: $VERSION"
+    echo "  project.yml MARKETING_VERSION: $PROJECT_VERSION"
+    echo ""
+    echo "Please update project.yml first:"
+    echo "  MARKETING_VERSION: \"$VERSION\""
+    echo "  CURRENT_PROJECT_VERSION: \"$((BUILD_NUMBER + 1))\""
+    exit 1
+fi
 RELEASES_DIR="releases"
 DMG_NAME="Orbit-v${VERSION}.dmg"
 APPCAST_FILE="docs/appcast.xml"
