@@ -72,3 +72,4 @@ credentials/
 
 # Release artifacts
 releases/
+.claude/
