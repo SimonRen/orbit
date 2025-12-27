@@ -142,3 +142,35 @@ Environments can be exported to `.orbit.json` files and imported back. Export in
 ### Configuration
 
 Persisted to `~/Library/Application Support/Orbit/config.json`. Runtime state (isEnabled, isTransitioning, service status, logs) is not persisted.
+
+## orb-kubectl Tool
+
+Orbit provides an optional `orb-kubectl` binary (kubectl with retry support) that users can install via the app menu.
+
+### Components
+
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| ToolManager | `orbit/Services/ToolManager.swift` | Download, install, version tracking |
+| OrbKubectlMenuView | `orbit/Views/Components/OrbKubectlMenuView.swift` | Menu item UI |
+| Install location | `~/Library/Application Support/Orbit/bin/` | Where binary is installed |
+
+### Release Process
+
+```bash
+# 1. Place your custom kubectl build at vendor/bin/kubectl
+
+# 2. Run the release script
+./scripts/release-orb-kubectl.sh 1.x.x
+
+# 3. Update ToolManager.swift with new version/URL/checksum (script prints the values)
+
+# 4. Release new Orbit version - users will see "Update orb-kubectl..." in menu
+```
+
+### Version Management
+
+- Expected version is hardcoded in `ToolManager.orbKubectlDefinition`
+- Version file stored at `~/Library/Application Support/Orbit/bin/orb-kubectl.version`
+- App compares installed vs expected version on launch
+- Menu shows: "Install...", "Update...", or "Installed" based on status

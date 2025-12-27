@@ -30,6 +30,28 @@ xcodebuild -scheme orbit -configuration Release build
    ```
 3. Toggle environment on/off from menubar or main window
 
+## orb-kubectl
+
+Orbit includes an optional `orb-kubectl` tool - a custom kubectl build with **retry support** for port-forwarding.
+
+### Install
+
+**Orbit menu → Install orb-kubectl...**
+
+The binary is downloaded to `~/Library/Application Support/Orbit/bin/` and automatically available in PATH for all services.
+
+### Usage
+
+Use `orb-kubectl` instead of `kubectl` in your service commands:
+
+```bash
+orb-kubectl port-forward --address $IP svc/my-service 8080:8080 --retry
+```
+
+### Update
+
+When a new version is available, the menu will show **"Update orb-kubectl..."**. Updates are tied to Orbit releases.
+
 ## Requirements
 
 - macOS 13.0+

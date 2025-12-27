@@ -73,3 +73,6 @@ credentials/
 # Release artifacts
 releases/
 .claude/
+
+# Vendored binaries (too large for git, released separately)
+vendor/
