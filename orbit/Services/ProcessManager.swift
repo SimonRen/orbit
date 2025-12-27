@@ -53,7 +53,12 @@ final class ProcessManager {
 
         // Setup environment
         var environment = ProcessInfo.processInfo.environment
-        environment["PATH"] = "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+
+        // Prepend Orbit's bin directory (for orb-kubectl) to PATH
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let orbitBinPath = appSupport.appendingPathComponent("Orbit/bin").path
+        let systemPath = "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+        environment["PATH"] = "\(orbitBinPath):\(systemPath)"
         process.environment = environment
 
         // Setup pipes for stdout/stderr
