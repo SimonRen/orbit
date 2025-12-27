@@ -41,27 +41,61 @@ echo "=== Building Orbit v${VERSION} ==="
 echo "→ Regenerating Xcode project..."
 xcodegen generate
 
-# Clean and build Release
-echo "→ Building Release configuration..."
-xcodebuild -project orbit.xcodeproj -scheme orbit -configuration Release clean build | xcpretty || xcodebuild -project orbit.xcodeproj -scheme orbit -configuration Release clean build | tail -20
+# Use archive + export workflow for proper code signing of embedded frameworks
+echo "→ Archiving Release configuration..."
+ARCHIVE_PATH="${RELEASES_DIR}/Orbit.xcarchive"
+rm -rf "$ARCHIVE_PATH"
 
-# Get actual build directory after build
-BUILD_DIR=$(xcodebuild -project orbit.xcodeproj -scheme orbit -configuration Release -showBuildSettings 2>/dev/null | grep -m1 'TARGET_BUILD_DIR' | awk '{print $3}')
-APP_PATH="${BUILD_DIR}/Orbit.app"
+xcodebuild -project orbit.xcodeproj -scheme orbit -configuration Release \
+    -archivePath "$ARCHIVE_PATH" \
+    clean archive | tail -30
 
-echo "→ App built at: ${APP_PATH}"
+# Create export options plist
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+EXPORT_OPTIONS="${RELEASES_DIR}/ExportOptions.plist"
+cat > "$EXPORT_OPTIONS" << 'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>method</key>
+    <string>developer-id</string>
+    <key>teamID</key>
+    <string>DN4YAHWP2P</string>
+    <key>signingStyle</key>
+    <string>manual</string>
+    <key>signingCertificate</key>
+    <string>Developer ID Application</string>
+</dict>
+</plist>
+EOF
+
+# Export the archive (this properly re-signs all embedded frameworks)
+echo "→ Exporting archive..."
+EXPORT_PATH="${RELEASES_DIR}/export"
+rm -rf "$EXPORT_PATH"
+xcodebuild -exportArchive \
+    -archivePath "$ARCHIVE_PATH" \
+    -exportPath "$EXPORT_PATH" \
+    -exportOptionsPlist "$EXPORT_OPTIONS" | tail -20
+
+APP_PATH="${EXPORT_PATH}/Orbit.app"
+echo "→ App exported at: ${APP_PATH}"
 
 # Verify signature
 echo "→ Verifying code signature..."
 codesign -dv --verbose=2 "${APP_PATH}" 2>&1 | grep -E "Identifier|Authority|Timestamp"
+codesign --verify --deep --strict "${APP_PATH}" && echo "✓ Signature valid" || echo "✗ Signature INVALID"
 
 # Notarize
 echo "→ Submitting for notarization..."
-cd "${BUILD_DIR}"
+cd "${EXPORT_PATH}"
 rm -f Orbit-notarize.zip
-zip -r Orbit-notarize.zip Orbit.app
+ditto -c -k --keepParent Orbit.app Orbit-notarize.zip
 xcrun notarytool submit Orbit-notarize.zip --keychain-profile "notary" --wait
 rm -f Orbit-notarize.zip
+cd "${PROJECT_ROOT}"
 
 # Staple
 echo "→ Stapling notarization ticket..."
@@ -69,7 +103,6 @@ xcrun stapler staple "${APP_PATH}"
 
 # Create DMG
 echo "→ Creating DMG..."
-cd "${OLDPWD}"
 mkdir -p "${RELEASES_DIR}"
 rm -rf dmg-staging "${RELEASES_DIR}/${DMG_NAME}"
 mkdir dmg-staging

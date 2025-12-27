@@ -24,7 +24,7 @@
 	<key>SUFeedURL</key>
 	<string>https://simonren.github.io/orbit/appcast.xml</string>
 	<key>SUPublicEDKey</key>
-	<string>PLACEHOLDER_PUBLIC_KEY</string>
+	<string>ekWf2z7F1HPDtuTa9OC+RyzUte/KqWiblWjyJIuftKE=</string>
 	<key>SUEnableAutomaticChecks</key>
 	<true/>
 
