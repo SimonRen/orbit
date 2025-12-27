@@ -6,6 +6,11 @@ options:
   createIntermediateGroups: true
   generateEmptyDirectories: true
 
+packages:
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    from: 2.5.0
+
 settings:
   base:
     MARKETING_VERSION: "0.4.0"
@@ -44,6 +49,8 @@ targets:
         copy:
           destination: wrapper
           subpath: "Contents/Library/LaunchServices"
+      - package: Sparkle
+        product: Sparkle
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.orbit.app

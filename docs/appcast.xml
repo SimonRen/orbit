@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <channel>
+        <title>Orbit Updates</title>
+        <link>https://simonren.github.io/orbit/</link>
+        <description>Updates for Orbit - macOS development environment port forwarding</description>
+        <language>en</language>
+
+        <!-- Latest version first -->
+        <item>
+            <title>Version 0.4.0</title>
+            <sparkle:version>0.4.0</sparkle:version>
+            <sparkle:shortVersionString>0.4.0</sparkle:shortVersionString>
+            <sparkle:releaseNotesLink>https://simonren.github.io/orbit/release-notes/0.4.0.html</sparkle:releaseNotesLink>
+            <pubDate>Fri, 27 Dec 2024 12:00:00 +0000</pubDate>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <enclosure
+                url="https://github.com/simonren/orbit/releases/download/v0.4.0/Orbit-v0.4.0.dmg"
+                sparkle:edSignature="PLACEHOLDER_SIGNATURE"
+                length="0"
+                type="application/octet-stream" />
+        </item>
+
+    </channel>
+</rss>

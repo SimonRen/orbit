@@ -12,6 +12,7 @@ class WindowCoordinator: ObservableObject {
 struct OrbitApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var appState = AppState()
+    @StateObject private var updaterManager = UpdaterManager.shared
     @Environment(\.openWindow) private var openWindow
 
     private let processManager = ProcessManager.shared
@@ -52,6 +53,11 @@ struct OrbitApp: App {
         .windowStyle(.titleBar)
         .defaultSize(width: 700, height: 500)
         .commands {
+            // Check for Updates in app menu (after About)
+            CommandGroup(after: .appInfo) {
+                CheckForUpdatesView(updaterManager: updaterManager)
+            }
+
             // File menu customization
             CommandGroup(replacing: .newItem) {
                 Button("New Environment") {

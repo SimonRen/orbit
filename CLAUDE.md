@@ -38,16 +38,57 @@ The `*.xcodeproj` is gitignored - always regenerate with `xcodegen generate`.
 ## Release Process
 
 ```bash
-# Automated release (builds, notarizes, creates DMG)
+# Automated release (builds, notarizes, creates DMG, signs for Sparkle, updates appcast)
 ./scripts/release.sh 0.x.x
 
-# Or manually:
-xcodebuild -project orbit.xcodeproj -scheme orbit -configuration Release clean build
-xcrun notarytool submit Orbit.zip --keychain-profile "notary" --wait
-xcrun stapler staple Orbit.app
+# After release script completes:
+# 1. Edit docs/release-notes/0.x.x.html
+# 2. git add docs/ && git commit -m "Release v0.x.x"
+# 3. git tag v0.x.x && git push origin main --tags
+# 4. gh release create v0.x.x releases/Orbit-v0.x.x.dmg
 ```
 
-Notarization credentials are stored in Keychain as profile "notary".
+Credentials stored in Keychain:
+- Notarization profile: "notary"
+- Sparkle EdDSA key: "Sparkle Private Key" (auto-created by `generate_keys`)
+
+## Auto-Update System
+
+Orbit uses [Sparkle](https://sparkle-project.org/) for automatic updates.
+
+### Components
+
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| UpdaterManager | `orbit/Services/UpdaterManager.swift` | Sparkle wrapper singleton |
+| Appcast | `docs/appcast.xml` | Update feed (hosted on GitHub Pages) |
+| Release Notes | `docs/release-notes/*.html` | Per-version release notes |
+| SUFeedURL | `Info.plist` | Points to `https://simonren.github.io/orbit/appcast.xml` |
+
+### First-Time Setup (One-Time)
+
+```bash
+# After building once to download Sparkle, generate EdDSA keys:
+SPARKLE_BIN=$(find ~/Library/Developer/Xcode/DerivedData/orbit-*/SourcePackages/artifacts/sparkle/Sparkle/bin -maxdepth 0 2>/dev/null | head -1)
+"${SPARKLE_BIN}/generate_keys"
+
+# This:
+# 1. Creates private key in Keychain (never share!)
+# 2. Prints public key - copy to Info.plist SUPublicEDKey
+```
+
+### How Updates Work
+
+1. App checks `appcast.xml` on startup (and daily)
+2. Sparkle compares `sparkle:version` with app's `CFBundleShortVersionString`
+3. If newer version found, shows update dialog with release notes
+4. User clicks "Install Update" → downloads DMG → verifies EdDSA signature → replaces app
+
+### GitHub Pages Setup
+
+1. Repo Settings → Pages → Source: Deploy from branch
+2. Branch: `main`, Folder: `/docs`
+3. URL: `https://simonren.github.io/orbit/`
 
 ## Architecture Overview
 
