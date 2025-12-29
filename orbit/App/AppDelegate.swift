@@ -96,7 +96,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     private func setupPopover() {
         popover = NSPopover()
-        popover?.contentSize = NSSize(width: 220, height: 200)
+        popover?.contentSize = NSSize(width: 260, height: 200)
         popover?.behavior = .transient
         popover?.delegate = self
         // Content is created lazily in showPopover() to avoid idle CPU usage
@@ -329,7 +329,7 @@ struct StatusMenuView: View {
             }
             .padding(.bottom, 4)
         }
-        .frame(width: 200)
+        .frame(width: 240)
     }
 }
 
@@ -350,6 +350,14 @@ struct EnvironmentMenuRow: View {
         }
     }
 
+    private var ipColor: Color {
+        if isHovered {
+            return .white.opacity(0.7)
+        } else {
+            return .secondary
+        }
+    }
+
     var body: some View {
         HStack {
             // Status indicator dot
@@ -357,9 +365,17 @@ struct EnvironmentMenuRow: View {
                 .fill(environment.isEnabled ? Color.green : Color.gray.opacity(0.5))
                 .frame(width: 6, height: 6)
 
-            Text(environment.name)
-                .foregroundColor(textColor)
-                .fontWeight(environment.isEnabled ? .medium : .regular)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(environment.name)
+                    .foregroundColor(textColor)
+                    .fontWeight(environment.isEnabled ? .medium : .regular)
+
+                if !environment.interfaces.isEmpty {
+                    Text(environment.interfaces.prefix(2).joined(separator: ", "))
+                        .font(.caption2)
+                        .foregroundColor(ipColor)
+                }
+            }
 
             Spacer()
 
