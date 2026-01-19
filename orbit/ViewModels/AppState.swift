@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import ZIPFoundation
 
 /// Central application state - single source of truth
 @MainActor
@@ -899,6 +900,320 @@ final class AppState: ObservableObject {
         }
 
         return true
+    }
+
+    // MARK: - Bulk Export/Import
+
+    /// Generate filename for bulk export (yyyyMMdd.orbit.zip)
+    static func bulkExportFilename() -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyyMMdd"
+        return "\(formatter.string(from: Date())).orbit.zip"
+    }
+
+    /// Export all environments to a ZIP archive
+    func exportAllEnvironments() -> Data? {
+        guard !environments.isEmpty else { return nil }
+
+        // Get app version from bundle
+        let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
+
+        // Create manifest
+        let manifest = BulkExportManifest(environments: sortedEnvironments, appVersion: appVersion)
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+
+        guard let manifestData = try? encoder.encode(manifest) else { return nil }
+
+        // Create archive in memory
+        guard let archive = Archive(accessMode: .create) else { return nil }
+
+        do {
+            // Add manifest
+            try archive.addEntry(
+                with: "manifest.json",
+                type: .file,
+                uncompressedSize: Int64(manifestData.count),
+                provider: { position, size in
+                    let start = Int(position)
+                    let end = min(start + size, manifestData.count)
+                    return manifestData[start..<end]
+                }
+            )
+
+            // Add each environment file
+            for (index, env) in sortedEnvironments.enumerated() {
+                let filename = manifest.environments[index].filename
+                guard let envData = exportEnvironment(env.id) else { continue }
+
+                try archive.addEntry(
+                    with: filename,
+                    type: .file,
+                    uncompressedSize: Int64(envData.count),
+                    provider: { position, size in
+                        let start = Int(position)
+                        let end = min(start + size, envData.count)
+                        return envData[start..<end]
+                    }
+                )
+            }
+
+            return archive.data
+        } catch {
+            print("Failed to create bulk export archive: \(error)")
+            return nil
+        }
+    }
+
+    /// Validate bulk import data and return a preview
+    func validateBulkImport(_ zipData: Data) -> Result<BulkImportPreview, BulkImportError> {
+        // Open the archive
+        guard let archive = Archive(data: zipData, accessMode: .read) else {
+            return .failure(.invalidArchive)
+        }
+
+        // Find and parse manifest
+        guard let manifestEntry = archive["manifest.json"] else {
+            return .failure(.missingManifest)
+        }
+
+        var manifestData = Data()
+        do {
+            _ = try archive.extract(manifestEntry) { data in
+                manifestData.append(data)
+            }
+        } catch {
+            return .failure(.invalidManifest(error))
+        }
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        let manifest: BulkExportManifest
+        do {
+            manifest = try decoder.decode(BulkExportManifest.self, from: manifestData)
+        } catch {
+            return .failure(.invalidManifest(error))
+        }
+
+        // Check version
+        guard manifest.version == "1.0" else {
+            return .failure(.unsupportedVersion(manifest.version))
+        }
+
+        // Check for empty archive
+        guard !manifest.environments.isEmpty else {
+            return .failure(.noEnvironments)
+        }
+
+        // Parse each environment file
+        var environmentPreviews: [BulkEnvironmentPreview] = []
+
+        // Track used IPs and names across all environments (existing + archive)
+        var usedIPs = Set(environments.flatMap { $0.interfaceIPs })
+        var usedNames = Set(environments.map { $0.name.lowercased() })
+
+        for envRef in manifest.environments {
+            guard let entry = archive[envRef.filename] else {
+                return .failure(.missingEnvironmentFile(envRef.filename))
+            }
+
+            var envData = Data()
+            do {
+                _ = try archive.extract(entry) { data in
+                    envData.append(data)
+                }
+            } catch {
+                return .failure(.invalidEnvironmentFile(envRef.filename, error))
+            }
+
+            // Validate using existing single-file validation
+            let result = validateImport(envData)
+            switch result {
+            case .success(var preview):
+                let envOriginalIPs = Set(preview.originalInterfaces.map { $0.ip })
+
+                // Check for IP conflicts (with existing OR previously processed archive envs)
+                let conflictingIPs = envOriginalIPs.intersection(usedIPs)
+                let hasIPConflicts = !conflictingIPs.isEmpty
+
+                // Check for name conflicts (with existing OR previously processed archive envs)
+                let hasNameConflict = usedNames.contains(preview.originalName.lowercased())
+
+                // Calculate suggested IPs considering all used IPs
+                var suggestedInterfaces: [Interface] = []
+                var tempUsedIPs = usedIPs
+
+                for interface in preview.originalInterfaces {
+                    if tempUsedIPs.contains(interface.ip) {
+                        let nextIP = findNextAvailableIPExcluding(tempUsedIPs)
+                        suggestedInterfaces.append(Interface(ip: nextIP, domain: interface.domain))
+                        tempUsedIPs.insert(nextIP)
+                    } else {
+                        suggestedInterfaces.append(interface)
+                        tempUsedIPs.insert(interface.ip)
+                    }
+                }
+
+                // Calculate suggested name considering all used names
+                let suggestedName: String
+                if hasNameConflict {
+                    suggestedName = generateUniqueNameAmong(preview.originalName, existingNames: usedNames)
+                } else {
+                    suggestedName = preview.originalName
+                }
+
+                // Check if this is an inter-import conflict (conflict with archive envs, not just existing)
+                let existingIPs = Set(environments.flatMap { $0.interfaceIPs })
+                let existingNames = Set(environments.map { $0.name.lowercased() })
+                let hasInterImportIPConflict = !envOriginalIPs.isDisjoint(with: usedIPs.subtracting(existingIPs))
+                let hasInterImportNameConflict = usedNames.subtracting(existingNames).contains(preview.originalName.lowercased())
+
+                // Create updated preview with correct conflict info
+                preview = ImportPreview(
+                    originalName: preview.originalName,
+                    originalInterfaces: preview.originalInterfaces,
+                    services: preview.services,
+                    suggestedName: suggestedName,
+                    suggestedInterfaces: suggestedInterfaces,
+                    hasNameConflict: hasNameConflict,
+                    hasIPConflicts: hasIPConflicts,
+                    conflictingIPs: conflictingIPs
+                )
+
+                var bulkPreview = BulkEnvironmentPreview(filename: envRef.filename, preview: preview)
+                bulkPreview.hasInterImportConflict = hasInterImportIPConflict || hasInterImportNameConflict
+
+                environmentPreviews.append(bulkPreview)
+
+                // Track the suggested IPs and name for subsequent environments
+                usedIPs.formUnion(Set(suggestedInterfaces.map { $0.ip }))
+                usedNames.insert(suggestedName.lowercased())
+
+            case .failure(let error):
+                // Convert ImportError to BulkImportError
+                return .failure(.invalidEnvironmentFile(envRef.filename, error))
+            }
+        }
+
+        return .success(BulkImportPreview(
+            manifestVersion: manifest.version,
+            appVersion: manifest.appVersion,
+            exportedAt: manifest.exportedAt,
+            environmentPreviews: environmentPreviews
+        ))
+    }
+
+    /// Helper to find next available IP excluding a set
+    private func findNextAvailableIPExcluding(_ usedIPs: Set<String>) -> String {
+        // Try 127.0.0.x range first
+        for i in 2...254 {
+            let candidate = "127.0.0.\(i)"
+            if !usedIPs.contains(candidate) {
+                return candidate
+            }
+        }
+
+        // Fallback to 127.0.1.x range
+        for i in 1...254 {
+            let candidate = "127.0.1.\(i)"
+            if !usedIPs.contains(candidate) {
+                return candidate
+            }
+        }
+
+        return "127.0.0.2"
+    }
+
+    /// Import multiple environments from bulk import preview
+    /// - Parameters:
+    ///   - previews: Array of environment previews to import (only selected ones)
+    /// - Returns: Array of newly created environments
+    @discardableResult
+    func importBulkEnvironments(_ previews: [BulkEnvironmentPreview]) -> [DevEnvironment] {
+        var importedEnvironments: [DevEnvironment] = []
+        var usedIPs = Set(environments.flatMap { $0.interfaceIPs })
+        var usedNames = Set(environments.map { $0.name.lowercased() })
+
+        for preview in previews where preview.isSelected {
+            // Determine final name (ensure uniqueness among newly imported)
+            var finalName = preview.editedName.trimmingCharacters(in: .whitespaces)
+            if usedNames.contains(finalName.lowercased()) {
+                finalName = generateUniqueNameAmong(finalName, existingNames: usedNames)
+            }
+            usedNames.insert(finalName.lowercased())
+
+            // Determine interfaces to use
+            var interfaces = preview.useSuggestedIPs ? preview.preview.suggestedInterfaces : preview.preview.originalInterfaces
+
+            // Ensure no IP conflicts with already-imported environments in this batch
+            var finalInterfaces: [Interface] = []
+            for interface in interfaces {
+                if usedIPs.contains(interface.ip) {
+                    let nextIP = findNextAvailableIPExcluding(usedIPs)
+                    finalInterfaces.append(Interface(ip: nextIP, domain: interface.domain))
+                    usedIPs.insert(nextIP)
+                } else {
+                    finalInterfaces.append(interface)
+                    usedIPs.insert(interface.ip)
+                }
+            }
+
+            // Create services with new UUIDs
+            var newServices: [Service] = []
+            for exportedService in preview.preview.services {
+                let service = Service(
+                    id: UUID(),
+                    name: exportedService.name,
+                    ports: exportedService.ports,
+                    command: exportedService.command,
+                    isEnabled: exportedService.isEnabled,
+                    order: exportedService.order
+                )
+                newServices.append(service)
+            }
+
+            let newEnv = DevEnvironment(
+                id: UUID(),
+                name: finalName,
+                interfaces: finalInterfaces,
+                services: newServices,
+                order: environments.count + importedEnvironments.count
+            )
+
+            environments.append(newEnv)
+
+            // Update cache for new services
+            for service in newServices {
+                serviceToEnvironmentCache[service.id] = newEnv.id
+            }
+
+            importedEnvironments.append(newEnv)
+        }
+
+        // Select the first imported environment
+        if let firstImported = importedEnvironments.first {
+            selectedEnvironmentId = firstImported.id
+        }
+
+        return importedEnvironments
+    }
+
+    /// Generate a unique name when importing multiple environments
+    private func generateUniqueNameAmong(_ baseName: String, existingNames: Set<String>) -> String {
+        let lowercased = baseName.lowercased()
+        if !existingNames.contains(lowercased) {
+            return baseName
+        }
+
+        var counter = 2
+        while existingNames.contains("\(baseName) (\(counter))".lowercased()) {
+            counter += 1
+        }
+
+        return "\(baseName) (\(counter))"
     }
 }
 
