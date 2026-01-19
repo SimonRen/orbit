@@ -169,11 +169,70 @@ final class AppState: ObservableObject {
 
     func updateEnvironment(_ environment: DevEnvironment) {
         guard let index = environments.firstIndex(where: { $0.id == environment.id }) else { return }
-        // Preserve runtime state
+
+        let oldEnv = environments[index]
+
+        // Check if content changed (excluding history and runtime state)
+        let contentChanged = oldEnv.name != environment.name ||
+                             oldEnv.interfaces != environment.interfaces ||
+                             oldEnv.services != environment.services
+
         var updated = environment
-        updated.isEnabled = environments[index].isEnabled
-        updated.isTransitioning = environments[index].isTransitioning
+
+        // Preserve runtime state
+        updated.isEnabled = oldEnv.isEnabled
+        updated.isTransitioning = oldEnv.isTransitioning
+
+        if contentChanged {
+            // Create versioned snapshot of old state before update
+            let snapshot = HistorySnapshot(from: oldEnv)
+            // Prepend new snapshot and keep max 10
+            updated.history = [snapshot] + oldEnv.history.prefix(9)
+        } else {
+            // Preserve existing history when no content change
+            updated.history = oldEnv.history
+        }
+
         environments[index] = updated
+    }
+
+    /// Restore an environment to a previous state from its history
+    /// - Parameters:
+    ///   - envId: The ID of the environment to restore
+    ///   - snapshotIndex: The index of the snapshot to restore (0 = most recent)
+    func restoreFromHistory(_ envId: UUID, snapshotIndex: Int) {
+        guard let envIndex = environments.firstIndex(where: { $0.id == envId }),
+              snapshotIndex >= 0,
+              snapshotIndex < environments[envIndex].history.count
+        else { return }
+
+        let snapshot = environments[envIndex].history[snapshotIndex]
+
+        // Create snapshot of current state before restoring (so restore is reversible)
+        let currentSnapshot = HistorySnapshot(from: environments[envIndex])
+
+        // Get migrated data (handles schema version differences)
+        let restoredData = snapshot.migratedData()
+
+        // Remove old service mappings from cache before restore
+        for service in environments[envIndex].services {
+            serviceToEnvironmentCache.removeValue(forKey: service.id)
+        }
+
+        // Restore from snapshot (preserve id, order, and runtime state)
+        environments[envIndex].name = restoredData.name
+        environments[envIndex].interfaces = restoredData.interfaces
+        environments[envIndex].services = restoredData.services
+
+        // Add restored service mappings to cache
+        for service in environments[envIndex].services {
+            serviceToEnvironmentCache[service.id] = envId
+        }
+
+        // Add current state to history (so user can undo the restore)
+        environments[envIndex].history.insert(currentSnapshot, at: 0)
+        // Keep max 10 entries
+        environments[envIndex].history = Array(environments[envIndex].history.prefix(10))
     }
 
     func deleteEnvironment(_ id: UUID) {
