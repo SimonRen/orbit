@@ -111,7 +111,7 @@ struct InterfaceListView: View {
     }
 
     private func suggestNextIP() -> String {
-        let usedIPs = Set(allEnvironments.flatMap { $0.interfaces })
+        let usedIPs = Set(allEnvironments.flatMap { $0.interfaceIPs })
 
         for i in 2...254 {
             let candidate = "127.0.0.\(i)"

@@ -28,7 +28,7 @@ struct DetailView: View {
     let environmentId: UUID
 
     @State private var editedName: String = ""
-    @State private var editedInterfaces: [String] = []
+    @State private var editedInterfaces: [Interface] = []
     @State private var hasUnsavedChanges: Bool = false
     @State private var isEditingName: Bool = false
     @FocusState private var focusedInterfaceIndex: Int?
@@ -355,10 +355,10 @@ struct DetailView: View {
 
             // Interfaces list in a card
             VStack(spacing: 0) {
-                ForEach(Array(editedInterfaces.enumerated()), id: \.offset) { index, ip in
+                ForEach(Array(editedInterfaces.enumerated()), id: \.offset) { index, interface in
                     InterfaceRowCompact(
                         index: index,
-                        ipAddress: Binding(
+                        interface: Binding(
                             get: { editedInterfaces[index] },
                             set: { newValue in
                                 editedInterfaces[index] = newValue
@@ -372,7 +372,7 @@ struct DetailView: View {
                             checkForChanges()
                         },
                         isFocused: $focusedInterfaceIndex,
-                        isUp: activeInterfaces.contains(ip)
+                        isUp: activeInterfaces.contains(interface.ip)
                     )
 
                     if index < editedInterfaces.count - 1 {
@@ -398,7 +398,7 @@ struct DetailView: View {
                     Divider()
                     Button {
                         let newIP = suggestNextIP()
-                        editedInterfaces.append(newIP)
+                        editedInterfaces.append(Interface(ip: newIP))
                         checkForChanges()
                     } label: {
                         HStack {
@@ -530,11 +530,12 @@ struct DetailView: View {
     }
 
     private func suggestNextIP() -> String {
-        let usedIPs = Set(appState.environments.flatMap { $0.interfaces })
+        let usedIPs = Set(appState.environments.flatMap { $0.interfaceIPs })
+        let editedIPs = Set(editedInterfaces.map { $0.ip })
 
         for i in 2...254 {
             let candidate = "127.0.0.\(i)"
-            if !usedIPs.contains(candidate) && !editedInterfaces.contains(candidate) {
+            if !usedIPs.contains(candidate) && !editedIPs.contains(candidate) {
                 return candidate
             }
         }
@@ -561,9 +562,9 @@ struct DetailView: View {
 
                 let data = pipe.fileHandleForReading.readDataToEndOfFile()
                 if let output = String(data: data, encoding: .utf8) {
-                    for ip in interfaces {
-                        if output.contains(ip) {
-                            active.insert(ip)
+                    for interface in interfaces {
+                        if output.contains(interface.ip) {
+                            active.insert(interface.ip)
                         }
                     }
                 }
@@ -582,7 +583,7 @@ struct DetailView: View {
 /// Compact interface row for the new card layout
 struct InterfaceRowCompact: View {
     let index: Int
-    @Binding var ipAddress: String
+    @Binding var interface: Interface
     let isDisabled: Bool
     let canRemove: Bool
     let onRemove: () -> Void
@@ -612,10 +613,20 @@ struct InterfaceRowCompact: View {
                 .foregroundColor(.secondary)
                 .frame(width: 45, alignment: .leading)
 
-            TextField("127.0.0.x", text: $ipAddress)
+            TextField("127.0.0.x", text: $interface.ip)
                 .textFieldStyle(.plain)
                 .disabled(isDisabled)
                 .focused(isFocused, equals: index)
+                .frame(width: 100)
+
+            TextField("Domain (optional)", text: Binding(
+                get: { interface.domain ?? "" },
+                set: { interface.domain = $0.isEmpty ? nil : $0 }
+            ))
+                .textFieldStyle(.plain)
+                .foregroundColor(.secondary)
+                .disabled(isDisabled)
+                .frame(minWidth: 120)
 
             Spacer()
 

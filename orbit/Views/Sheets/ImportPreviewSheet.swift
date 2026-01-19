@@ -168,13 +168,14 @@ struct ImportPreviewSheet: View {
     }
 
     private var displayInterfaces: [String] {
-        useSuggestedIPs ? preview.suggestedInterfaces : preview.originalInterfaces
+        let interfaces = useSuggestedIPs ? preview.suggestedInterfaces : preview.originalInterfaces
+        return interfaces.map { $0.ip }
     }
 
     private func interfaceRow(index: Int, ip: String) -> some View {
         let variableName = index == 0 ? "$IP" : "$IP\(index + 1)"
-        let isConflicting = preview.conflictingIPs.contains(preview.originalInterfaces[safe: index] ?? "")
-        let originalIP = preview.originalInterfaces[safe: index] ?? ""
+        let originalIP = preview.originalInterfaces[safe: index]?.ip ?? ""
+        let isConflicting = preview.conflictingIPs.contains(originalIP)
 
         return HStack(spacing: 12) {
             Text(variableName)
@@ -233,7 +234,7 @@ private extension Array {
     ImportPreviewSheet(
         preview: ImportPreview(
             originalName: "Claymore-DEV",
-            originalInterfaces: ["127.0.0.2", "127.0.0.3"],
+            originalInterfaces: [Interface(ip: "127.0.0.2"), Interface(ip: "127.0.0.3")],
             services: [
                 ExportedService(from: Service(
                     name: "postgres",
@@ -247,7 +248,7 @@ private extension Array {
                 ))
             ],
             suggestedName: "Claymore-DEV (Imported)",
-            suggestedInterfaces: ["127.0.0.4", "127.0.0.5"],
+            suggestedInterfaces: [Interface(ip: "127.0.0.4"), Interface(ip: "127.0.0.5")],
             hasNameConflict: true,
             hasIPConflicts: true,
             conflictingIPs: ["127.0.0.2"]

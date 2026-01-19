@@ -29,9 +29,9 @@ final class ProcessManager {
     /// Spawns a process for the given service
     /// - Parameters:
     ///   - service: The service configuration
-    ///   - interfaces: Array of IPs for variable substitution
+    ///   - interfaces: Array of Interface objects for variable substitution
     /// - Returns: true if spawn succeeded, false otherwise
-    func spawnProcess(for service: Service, interfaces: [String]) -> Bool {
+    func spawnProcess(for service: Service, interfaces: [Interface]) -> Bool {
         lock.lock()
         defer { lock.unlock() }
 

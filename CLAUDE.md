@@ -28,6 +28,10 @@ pkill -f "Orbit.app"; open ~/Library/Developer/Xcode/DerivedData/orbit-*/Build/P
 
 The `*.xcodeproj` is gitignored - always regenerate with `xcodegen generate`.
 
+**Version numbers** are in `project.yml`:
+- `MARKETING_VERSION`: User-visible version (e.g., "0.5.4")
+- `CURRENT_PROJECT_VERSION`: Build number (increment for each release)
+
 ## Build Configurations
 
 | Config | Purpose | Key Settings |
@@ -107,6 +111,17 @@ Orbit is a macOS SwiftUI app for managing development environment port forwardin
 
 **Privileged Helper (`orbitHelper/`)**: XPC service running as root to manage network interface aliases without repeated password prompts. Installed via SMJobBless on first use. The helper binary is embedded in the app bundle at `Contents/Library/LaunchServices/com.orbit.helper`.
 
+Key helper responsibilities:
+- **Interface management**: Adds/removes loopback aliases via `ifconfig lo0 alias/−alias`
+- **Orphan cleanup**: Monitors app PID and kills orphaned process groups if app crashes (SIGTERM then SIGKILL after 3s)
+- **Security**: Verifies XPC connections via code signature (team ID + bundle ID requirement)
+
+When modifying `HelperProtocol.swift`, update both copies:
+- `orbit/Services/HelperProtocol.swift` (app side)
+- `orbitHelper/HelperProtocol.swift` (helper side)
+
+Bump `HelperConstants.helperVersion` when changing helper behavior—the app can detect version mismatches.
+
 **AppState (`orbit/ViewModels/AppState.swift`)**: Central ObservableObject holding all application state. Manages:
 - Environment/service CRUD operations
 - Activation/deactivation with transition state tracking
@@ -114,9 +129,11 @@ Orbit is a macOS SwiftUI app for managing development environment port forwardin
 - Process lifecycle coordination
 - Import/export of environment configurations
 
-**ProcessManager (`orbit/Services/ProcessManager.swift`)**: Spawns and monitors service processes. Kills entire process tree on stop using `pgrep -P` to find child processes recursively.
+**ProcessManager (`orbit/Services/ProcessManager.swift`)**: Spawns and monitors service processes. Each service runs in its own process group (`setpgid`). Kills entire process tree on stop using `pgrep -P` to find child processes recursively.
 
 **NetworkManager (`orbit/Services/NetworkManager.swift`)**: Communicates with the privileged helper via XPC to add/remove interface aliases.
+
+**OrphanRegistrar (`orbit/Services/OrphanRegistrar.swift`)**: Tracks spawned process groups and registers them with the helper. If the app crashes, the helper uses this list to clean up orphaned processes.
 
 **WindowCoordinator (`orbit/App/OrbitApp.swift`)**: Singleton for cross-window communication. Provides closures to open main window, log windows, and trigger import dialogs from anywhere (e.g., menubar).
 

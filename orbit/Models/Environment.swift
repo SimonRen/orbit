@@ -1,10 +1,21 @@
 import Foundation
 
+/// Represents an interface with IP address and optional domain alias
+struct Interface: Codable, Equatable {
+    var ip: String
+    var domain: String?  // Optional: e.g., "*.meera-dev"
+
+    init(ip: String, domain: String? = nil) {
+        self.ip = ip
+        self.domain = domain
+    }
+}
+
 /// Represents a development environment configuration
 struct DevEnvironment: Identifiable, Codable, Equatable {
     let id: UUID
     var name: String
-    var interfaces: [String]    // IP addresses, e.g., ["127.0.0.2", "127.0.0.3"]
+    var interfaces: [Interface]
     var services: [Service]
     var order: Int
 
@@ -22,7 +33,7 @@ struct DevEnvironment: Identifiable, Codable, Equatable {
     init(
         id: UUID = UUID(),
         name: String,
-        interfaces: [String] = ["127.0.0.2"],
+        interfaces: [Interface] = [Interface(ip: "127.0.0.2")],
         services: [Service] = [],
         order: Int = 0
     ) {
@@ -37,7 +48,15 @@ struct DevEnvironment: Identifiable, Codable, Equatable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(UUID.self, forKey: .id)
         name = try container.decode(String.self, forKey: .name)
-        interfaces = try container.decode([String].self, forKey: .interfaces)
+
+        // Try new Interface format first, fall back to old [String] format for migration
+        if let newInterfaces = try? container.decode([Interface].self, forKey: .interfaces) {
+            interfaces = newInterfaces
+        } else {
+            let oldInterfaces = try container.decode([String].self, forKey: .interfaces)
+            interfaces = oldInterfaces.map { Interface(ip: $0, domain: nil) }
+        }
+
         services = try container.decode([Service].self, forKey: .services)
         order = try container.decode(Int.self, forKey: .order)
         // Runtime properties get default values
@@ -89,6 +108,11 @@ struct DevEnvironment: Identifiable, Codable, Equatable {
         interfaces.indices.map { variableName(for: $0) }
     }
 
+    /// Extract just the IP addresses from interfaces
+    var interfaceIPs: [String] {
+        interfaces.map { $0.ip }
+    }
+
     /// Generate AI-friendly markdown description for clipboard
     func copyableAIDescription() -> String {
         var lines: [String] = []
@@ -97,11 +121,22 @@ struct DevEnvironment: Identifiable, Codable, Equatable {
         lines.append("## Environment: \(name)")
         lines.append("")
 
+        // Check if any interface has a domain
+        let hasDomains = interfaces.contains { $0.domain != nil && !$0.domain!.isEmpty }
+
         // Interfaces section
         lines.append("### Interfaces")
-        for (index, ip) in interfaces.enumerated() {
+        if hasDomains {
+            lines.append("*Loopback aliases on lo0. Domain patterns (e.g., `*.example`) are resolved via local DNS (dnsmasq) to the corresponding IP.*")
+            lines.append("")
+        }
+        for (index, interface) in interfaces.enumerated() {
             let varName = variableName(for: index)
-            lines.append("- \(varName): \(ip)")
+            if let domain = interface.domain, !domain.isEmpty {
+                lines.append("- \(varName): `\(interface.ip)` → `\(domain)`")
+            } else {
+                lines.append("- \(varName): `\(interface.ip)`")
+            }
         }
         lines.append("")
 

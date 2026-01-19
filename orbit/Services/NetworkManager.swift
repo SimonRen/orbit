@@ -82,12 +82,13 @@ final class NetworkManager {
     }
 
     /// Activates all interfaces for an environment with rollback on failure
-    /// - Parameter interfaces: Array of IP addresses to activate
+    /// - Parameter interfaces: Array of Interface objects to activate
     /// - Throws: NetworkError if any interface fails (after rolling back)
-    func activateInterfaces(_ interfaces: [String]) async throws {
+    func activateInterfaces(_ interfaces: [Interface]) async throws {
         var activated: [String] = []
 
-        for ip in interfaces {
+        for interface in interfaces {
+            let ip = interface.ip
             do {
                 try await bringUpInterface(ip)
                 activated.append(ip)
@@ -107,12 +108,12 @@ final class NetworkManager {
     }
 
     /// Deactivates all interfaces for an environment
-    /// - Parameter interfaces: Array of IP addresses to deactivate
+    /// - Parameter interfaces: Array of Interface objects to deactivate
     /// - Note: This is best-effort and won't throw on individual failures
-    func deactivateInterfaces(_ interfaces: [String]) async {
-        for ip in interfaces {
+    func deactivateInterfaces(_ interfaces: [Interface]) async {
+        for interface in interfaces {
             // Best effort - don't fail if some can't be removed
-            try? await bringDownInterface(ip)
+            try? await bringDownInterface(interface.ip)
         }
     }
 

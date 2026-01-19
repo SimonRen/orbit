@@ -158,7 +158,7 @@ final class AppState: ObservableObject {
         let newEnv = DevEnvironment(
             id: UUID(),
             name: generateUniqueEnvironmentName(),
-            interfaces: [nextIP],
+            interfaces: [Interface(ip: nextIP)],
             services: [],
             order: environments.count
         )
@@ -632,7 +632,7 @@ final class AppState: ObservableObject {
     // MARK: - Helper Methods
 
     func suggestNextIP() -> String {
-        let usedIPs = Set(environments.flatMap { $0.interfaces })
+        let usedIPs = Set(environments.flatMap { $0.interfaceIPs })
 
         // Try 127.0.0.x range first
         for i in 2...254 {
@@ -710,9 +710,9 @@ final class AppState: ObservableObject {
         }
 
         // Validate IP addresses
-        for ip in imported.interfaces {
-            if !isValidIPAddress(ip) {
-                return .failure(.invalidIPFormat(ip))
+        for interface in imported.interfaces {
+            if !isValidIPAddress(interface.ip) {
+                return .failure(.invalidIPFormat(interface.ip))
             }
         }
 
@@ -722,11 +722,12 @@ final class AppState: ObservableObject {
         let suggestedName = hasNameConflict ? generateUniqueImportName(imported.name) : imported.name
 
         // Check for IP conflicts
-        let usedIPs = Set(environments.flatMap { $0.interfaces })
-        let conflictingIPs = Set(imported.interfaces).intersection(usedIPs)
+        let usedIPs = Set(environments.flatMap { $0.interfaceIPs })
+        let importedIPs = Set(imported.interfaces.map { $0.ip })
+        let conflictingIPs = importedIPs.intersection(usedIPs)
         let hasIPConflicts = !conflictingIPs.isEmpty
         let suggestedInterfaces = hasIPConflicts
-            ? suggestAlternativeIPs(for: imported.interfaces)
+            ? suggestAlternativeInterfaces(for: imported.interfaces)
             : imported.interfaces
 
         return .success(ImportPreview(
@@ -795,17 +796,17 @@ final class AppState: ObservableObject {
         return "\(baseName) (Imported \(counter))"
     }
 
-    private func suggestAlternativeIPs(for interfaces: [String]) -> [String] {
-        var usedIPs = Set(environments.flatMap { $0.interfaces })
-        var suggestedIPs: [String] = []
+    private func suggestAlternativeInterfaces(for interfaces: [Interface]) -> [Interface] {
+        var usedIPs = Set(environments.flatMap { $0.interfaceIPs })
+        var suggestedInterfaces: [Interface] = []
 
-        for _ in interfaces {
+        for interface in interfaces {
             let nextIP = findNextAvailableIP(excluding: usedIPs)
-            suggestedIPs.append(nextIP)
+            suggestedInterfaces.append(Interface(ip: nextIP, domain: interface.domain))
             usedIPs.insert(nextIP)
         }
 
-        return suggestedIPs
+        return suggestedInterfaces
     }
 
     private func findNextAvailableIP(excluding usedIPs: Set<String>) -> String {

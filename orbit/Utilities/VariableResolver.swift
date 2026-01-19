@@ -5,15 +5,15 @@ enum VariableResolver {
     /// Resolve all $IP variables in a command string
     /// - Parameters:
     ///   - command: Command string containing $IP, $IP2, $IP3, etc.
-    ///   - interfaces: Array of IP addresses to substitute
+    ///   - interfaces: Array of Interface objects to substitute
     /// - Returns: Command with variables replaced by actual IPs
-    static func resolve(_ command: String, interfaces: [String]) -> String {
+    static func resolve(_ command: String, interfaces: [Interface]) -> String {
         var result = command
 
         // Replace variables in reverse order to handle $IP10 before $IP1
-        for (index, ip) in interfaces.enumerated().reversed() {
+        for (index, interface) in interfaces.enumerated().reversed() {
             let variable = index == 0 ? "$IP" : "$IP\(index + 1)"
-            result = result.replacingOccurrences(of: variable, with: ip)
+            result = result.replacingOccurrences(of: variable, with: interface.ip)
         }
 
         return result
