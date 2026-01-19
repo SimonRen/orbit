@@ -46,6 +46,9 @@ struct DetailView: View {
     @State private var activeInterfaces: Set<String> = []
     @State private var serviceFilter: ServiceFilter = .all
     @State private var isFullScreen: Bool = false
+    @State private var showHistoryPopover = false
+    @State private var showingUnsavedChangesOnRestore = false
+    @State private var pendingRestoreIndex: Int?
 
     private var environment: DevEnvironment? {
         appState.environments.first { $0.id == environmentId }
@@ -249,6 +252,26 @@ struct DetailView: View {
                         Text("Please deactivate the environment before deleting services. Turn off the environment toggle first.")
                     }
                 }
+                .alert("Unsaved Changes", isPresented: $showingUnsavedChangesOnRestore) {
+                    Button("Save & Restore") {
+                        saveChanges()
+                        if let index = pendingRestoreIndex {
+                            performRestore(index)
+                        }
+                        pendingRestoreIndex = nil
+                    }
+                    Button("Discard & Restore", role: .destructive) {
+                        if let index = pendingRestoreIndex {
+                            performRestore(index)
+                        }
+                        pendingRestoreIndex = nil
+                    }
+                    Button("Cancel", role: .cancel) {
+                        pendingRestoreIndex = nil
+                    }
+                } message: {
+                    Text("You have unsaved changes. Would you like to save them before restoring from history?")
+                }
             } else {
                 EmptyDetailView()
             }
@@ -319,6 +342,33 @@ struct DetailView: View {
             }
             .buttonStyle(.bordered)
             .help("Copy for AI")
+
+            // History button
+            Button {
+                showHistoryPopover = true
+            } label: {
+                Image(systemName: "clock.arrow.circlepath")
+            }
+            .buttonStyle(.bordered)
+            .help("View history")
+            .disabled(environment?.history.isEmpty ?? true)
+            .popover(isPresented: $showHistoryPopover) {
+                if let env = environment {
+                    HistoryPopoverView(
+                        environment: env,
+                        onRestore: { index in
+                            if hasUnsavedChanges {
+                                // Store pending restore and show confirmation
+                                pendingRestoreIndex = index
+                                showHistoryPopover = false
+                                showingUnsavedChangesOnRestore = true
+                            } else {
+                                performRestore(index)
+                            }
+                        }
+                    )
+                }
+            }
 
             // Add service button
             Button {
@@ -516,6 +566,15 @@ struct DetailView: View {
         env.interfaces = editedInterfaces
         appState.updateEnvironment(env)
         hasUnsavedChanges = false
+    }
+
+    private func performRestore(_ snapshotIndex: Int) {
+        appState.restoreFromHistory(environmentId, snapshotIndex: snapshotIndex)
+        showHistoryPopover = false
+        // Refresh editing state from restored environment
+        if let updatedEnv = appState.environments.first(where: { $0.id == environmentId }) {
+            loadEnvironmentData(updatedEnv)
+        }
     }
 
     private func copyForAI() {
