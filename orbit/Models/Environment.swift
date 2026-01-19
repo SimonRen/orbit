@@ -88,4 +88,37 @@ struct DevEnvironment: Identifiable, Codable, Equatable {
     var availableVariables: [String] {
         interfaces.indices.map { variableName(for: $0) }
     }
+
+    /// Generate AI-friendly markdown description for clipboard
+    func copyableAIDescription() -> String {
+        var lines: [String] = []
+
+        // Header
+        lines.append("## Environment: \(name)")
+        lines.append("")
+
+        // Interfaces section
+        lines.append("### Interfaces")
+        for (index, ip) in interfaces.enumerated() {
+            let varName = variableName(for: index)
+            lines.append("- \(varName): \(ip)")
+        }
+        lines.append("")
+
+        // Services section (enabled services only)
+        let enabledServices = sortedServices.filter { $0.isEnabled }
+        lines.append("### Services")
+        if enabledServices.isEmpty {
+            lines.append("No enabled services.")
+        } else {
+            lines.append("| Service | Ports |")
+            lines.append("|---------|-------|")
+
+            for service in enabledServices {
+                lines.append("| \(service.name) | \(service.ports) |")
+            }
+        }
+
+        return lines.joined(separator: "\n")
+    }
 }

@@ -311,6 +311,15 @@ struct DetailView: View {
                 .disabled(isActive || isTransitioning)
             }
 
+            // Copy for AI button
+            Button {
+                copyForAI()
+            } label: {
+                Image(systemName: "doc.on.doc")
+            }
+            .buttonStyle(.bordered)
+            .help("Copy for AI")
+
             // Add service button
             Button {
                 showingAddServiceSheet = true
@@ -507,6 +516,17 @@ struct DetailView: View {
         env.interfaces = editedInterfaces
         appState.updateEnvironment(env)
         hasUnsavedChanges = false
+    }
+
+    private func copyForAI() {
+        guard let env = environment else { return }
+        // Use edited values (what user sees) rather than persisted values
+        var envCopy = env
+        envCopy.name = editedName
+        envCopy.interfaces = editedInterfaces
+        let text = envCopy.copyableAIDescription()
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
     }
 
     private func suggestNextIP() -> String {
