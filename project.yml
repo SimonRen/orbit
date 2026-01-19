@@ -10,11 +10,14 @@ packages:
   Sparkle:
     url: https://github.com/sparkle-project/Sparkle
     from: 2.5.0
+  ZIPFoundation:
+    url: https://github.com/weichsel/ZIPFoundation
+    from: 0.9.0
 
 settings:
   base:
-    MARKETING_VERSION: "0.5.5"
-    CURRENT_PROJECT_VERSION: "10"
+    MARKETING_VERSION: "0.5.6"
+    CURRENT_PROJECT_VERSION: "11"
     DEVELOPMENT_TEAM: "DN4YAHWP2P"
     CODE_SIGN_STYLE: Manual
     SWIFT_VERSION: "5.9"
@@ -56,6 +59,7 @@ targets:
           subpath: "Contents/Library/LaunchServices"
       - package: Sparkle
         product: Sparkle
+      - package: ZIPFoundation
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.orbit.app

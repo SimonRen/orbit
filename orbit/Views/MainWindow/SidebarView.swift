@@ -13,6 +13,11 @@ struct SidebarView: View {
     @State private var importError: ImportError?
     @State private var showingImportError = false
 
+    // Bulk Import/Export state
+    @State private var bulkImportPreview: BulkImportPreview?
+    @State private var bulkImportError: BulkImportError?
+    @State private var showingBulkImportError = false
+
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
     }
@@ -169,9 +174,32 @@ struct SidebarView: View {
         } message: {
             Text(importError?.localizedDescription ?? "Unknown error")
         }
+        .sheet(item: $bulkImportPreview) { preview in
+            BulkImportPreviewSheet(
+                preview: preview,
+                onImport: { previews in
+                    _ = appState.importBulkEnvironments(previews)
+                    bulkImportPreview = nil
+                },
+                onCancel: {
+                    bulkImportPreview = nil
+                }
+            )
+        }
+        .alert("Import Archive Error", isPresented: $showingBulkImportError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(bulkImportError?.localizedDescription ?? "Unknown error")
+        }
         .onAppear {
             WindowCoordinator.shared.triggerImport = { [self] in
                 importEnvironment()
+            }
+            WindowCoordinator.shared.triggerBulkImport = { [self] in
+                importArchive()
+            }
+            WindowCoordinator.shared.triggerBulkExport = { [self] in
+                exportAllEnvironments()
             }
         }
     }
@@ -226,6 +254,59 @@ struct SidebarView: View {
                 DispatchQueue.main.async {
                     importError = .invalidJSON(error)
                     showingImportError = true
+                }
+            }
+        }
+    }
+
+    private func importArchive() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [UTType.zip]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.message = "Select an Orbit archive (.orbit.zip) to import"
+
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+
+            do {
+                let data = try Data(contentsOf: url)
+
+                DispatchQueue.main.async {
+                    let result = appState.validateBulkImport(data)
+
+                    switch result {
+                    case .success(let preview):
+                        bulkImportPreview = preview
+                    case .failure(let error):
+                        bulkImportError = error
+                        showingBulkImportError = true
+                    }
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    bulkImportError = .invalidArchive
+                    showingBulkImportError = true
+                }
+            }
+        }
+    }
+
+    private func exportAllEnvironments() {
+        guard let data = appState.exportAllEnvironments() else { return }
+
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = AppState.bulkExportFilename()
+        panel.allowedContentTypes = [UTType.zip]
+        panel.canCreateDirectories = true
+        panel.message = "Export all environments to a single archive"
+
+        panel.begin { response in
+            if response == .OK, let url = panel.url {
+                do {
+                    try data.write(to: url)
+                } catch {
+                    print("Failed to export archive: \(error)")
                 }
             }
         }

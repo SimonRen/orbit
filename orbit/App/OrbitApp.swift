@@ -5,7 +5,9 @@ class WindowCoordinator: ObservableObject {
     static let shared = WindowCoordinator()
     var openMainWindow: (() -> Void)?
     var openLogWindow: ((UUID) -> Void)?  // Opens log window for service ID
-    var triggerImport: (() -> Void)?  // Triggers import dialog
+    var triggerImport: (() -> Void)?  // Triggers single-file import dialog
+    var triggerBulkImport: (() -> Void)?  // Triggers bulk archive import dialog
+    var triggerBulkExport: (() -> Void)?  // Triggers bulk export dialog
 }
 
 @main
@@ -70,10 +72,25 @@ struct OrbitApp: App {
                 }
                 .keyboardShortcut("n", modifiers: .command)
 
+                Divider()
+
                 Button("Import...") {
                     WindowCoordinator.shared.triggerImport?()
                 }
                 .keyboardShortcut("i", modifiers: .command)
+
+                Divider()
+
+                Button("Export Archive...") {
+                    WindowCoordinator.shared.triggerBulkExport?()
+                }
+                .keyboardShortcut("e", modifiers: [.command, .shift])
+                .disabled(appState.environments.isEmpty)
+
+                Button("Import Archive...") {
+                    WindowCoordinator.shared.triggerBulkImport?()
+                }
+                .keyboardShortcut("i", modifiers: [.command, .shift])
             }
 
             // Custom menu for environments
