@@ -90,7 +90,7 @@ final class ValidationService {
             // Skip the environment being edited
             if env.id == excludingEnvironmentId { continue }
 
-            if env.interfaces.contains(trimmed) {
+            if env.interfaceIPs.contains(trimmed) {
                 return .failure(.ipAlreadyInUse(ip: trimmed, environmentName: env.name))
             }
         }

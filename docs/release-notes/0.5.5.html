@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            padding: 20px;
+            max-width: 600px;
+            line-height: 1.5;
+            background: #ffffff;
+            color: #333;
+        }
+        h2 { color: #1a1a1a; border-bottom: 1px solid #ddd; padding-bottom: 8px; }
+        ul { padding-left: 20px; }
+        li { margin: 8px 0; }
+        @media (prefers-color-scheme: dark) {
+            body { background: #2d2d2d; color: #e0e0e0; }
+            h2 { color: #ffffff; border-bottom-color: #555; }
+        }
+    </style>
+</head>
+<body>
+    <h2>What's New in Orbit 0.5.5</h2>
+    <ul>
+        <li><strong>Domain Aliases for Interfaces:</strong> Add optional domain patterns (e.g., <code>*.meera-dev</code>) to interfaces for documentation. Useful when using dnsmasq for local DNS resolution.</li>
+        <li><strong>Improved Copy for AI:</strong> The "Copy for AI" output now includes domain alias information with explanatory context.</li>
+        <li><strong>Backward Compatible Exports:</strong> Environment exports remain compatible with older versions when no domains are configured.</li>
+    </ul>
+</body>
+</html>

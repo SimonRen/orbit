@@ -52,7 +52,7 @@ struct EnvironmentRowView: View {
 
                 // Interface IPs
                 if !environment.interfaces.isEmpty {
-                    Text(environment.interfaces.joined(separator: ", "))
+                    Text(environment.interfaceIPs.joined(separator: ", "))
                         .font(.caption2)
                         .foregroundColor(.secondary)
                         .lineLimit(1)
@@ -95,7 +95,7 @@ struct EnvironmentRowView: View {
             environment: {
                 var env = DevEnvironment(
                     name: "Staging-2",
-                    interfaces: ["127.0.0.2", "127.0.0.3"]
+                    interfaces: [Interface(ip: "127.0.0.2"), Interface(ip: "127.0.0.3")]
                 )
                 env.isEnabled = true
                 return env

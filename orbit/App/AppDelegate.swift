@@ -371,7 +371,7 @@ struct EnvironmentMenuRow: View {
                     .fontWeight(environment.isEnabled ? .medium : .regular)
 
                 if !environment.interfaces.isEmpty {
-                    Text(environment.interfaces.prefix(2).joined(separator: ", "))
+                    Text(environment.interfaceIPs.prefix(2).joined(separator: ", "))
                         .font(.caption2)
                         .foregroundColor(ipColor)
                 }
