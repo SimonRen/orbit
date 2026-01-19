@@ -11,6 +11,44 @@ struct Interface: Codable, Equatable {
     }
 }
 
+// MARK: - History Snapshots
+
+/// Schema version for history snapshots - bump when snapshot data structure changes
+enum SnapshotSchema {
+    static let current = 1
+}
+
+/// The actual snapshot content (versioned separately from container)
+struct SnapshotData: Codable, Equatable {
+    let name: String
+    let interfaces: [Interface]
+    let services: [Service]
+}
+
+/// Versioned snapshot data - stores environment state at a point in time
+struct HistorySnapshot: Codable, Equatable {
+    let schemaVersion: Int
+    let timestamp: Date
+    let data: SnapshotData
+
+    init(from environment: DevEnvironment) {
+        self.schemaVersion = SnapshotSchema.current
+        self.timestamp = Date()
+        self.data = SnapshotData(
+            name: environment.name,
+            interfaces: environment.interfaces,
+            services: environment.services
+        )
+    }
+
+    /// Migrate snapshot data to current schema if needed
+    func migratedData() -> SnapshotData {
+        // Currently at v1, no migration needed
+        // Future: add switch on schemaVersion for migrations
+        return data
+    }
+}
+
 /// Represents a development environment configuration
 struct DevEnvironment: Identifiable, Codable, Equatable {
     let id: UUID
@@ -18,6 +56,7 @@ struct DevEnvironment: Identifiable, Codable, Equatable {
     var interfaces: [Interface]
     var services: [Service]
     var order: Int
+    var history: [HistorySnapshot] = []  // Max 10, newest first
 
     // MARK: - Runtime State (not persisted)
 
@@ -27,7 +66,7 @@ struct DevEnvironment: Identifiable, Codable, Equatable {
     // MARK: - Codable
 
     enum CodingKeys: String, CodingKey {
-        case id, name, interfaces, services, order
+        case id, name, interfaces, services, order, history
     }
 
     init(
@@ -35,13 +74,15 @@ struct DevEnvironment: Identifiable, Codable, Equatable {
         name: String,
         interfaces: [Interface] = [Interface(ip: "127.0.0.2")],
         services: [Service] = [],
-        order: Int = 0
+        order: Int = 0,
+        history: [HistorySnapshot] = []
     ) {
         self.id = id
         self.name = name
         self.interfaces = interfaces
         self.services = services
         self.order = order
+        self.history = history
     }
 
     init(from decoder: Decoder) throws {
@@ -59,6 +100,10 @@ struct DevEnvironment: Identifiable, Codable, Equatable {
 
         services = try container.decode([Service].self, forKey: .services)
         order = try container.decode(Int.self, forKey: .order)
+
+        // History is optional for backwards compatibility with existing configs
+        history = (try? container.decode([HistorySnapshot].self, forKey: .history)) ?? []
+
         // Runtime properties get default values
     }
 
