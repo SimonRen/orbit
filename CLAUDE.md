@@ -145,6 +145,12 @@ Bump `HelperConstants.helperVersion` when changing helper behavior—the app can
 4. ProcessManager spawns enabled services with resolved commands
 5. Sets `environment.isEnabled = true`, clears transitioning
 
+### Interfaces
+
+Each environment has one or more `Interface` objects:
+- `ip`: Loopback alias address (e.g., `127.0.0.2`)
+- `domain`: Optional domain pattern (e.g., `*.myapp-dev`) for local DNS resolution via dnsmasq
+
 ### Variable Substitution
 
 Commands use `$IP`, `$IP2`, `$IP3` etc. which resolve to the environment's interface IPs:
@@ -154,7 +160,17 @@ Commands use `$IP`, `$IP2`, `$IP3` etc. which resolve to the environment's inter
 
 ### Import/Export
 
-Environments can be exported to `.orbit.json` files and imported back. Export includes environment name, interfaces, and services. Import auto-detects name/IP conflicts and suggests resolutions.
+**Single environment**: Export to `.orbit.json` files and import back. Export includes environment name, interfaces, and services. Import auto-detects name/IP conflicts and suggests resolutions.
+
+**Bulk export**: Export all environments to a dated `.orbit.zip` archive (e.g., `20240115.orbit.zip`). Contains a `manifest.json` with environment references and individual `.orbit.json` files. Uses ZIPFoundation.
+
+### Environment History
+
+Each environment maintains a history of up to 10 snapshots for rollback. Snapshots are created automatically when content changes (name, interfaces, or services). History is versioned via `SnapshotSchema.current` to handle future migrations.
+
+Key files:
+- `DevEnvironment.history` - Array of `HistorySnapshot` (newest first)
+- `AppState.restoreFromHistory()` - Restores to a previous snapshot (reversible)
 
 ### Configuration
 
