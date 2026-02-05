@@ -107,9 +107,7 @@ struct EditServiceSheet: View {
                             .cornerRadius(4)
                     }
 
-                    TextEditor(text: $command)
-                        .font(.system(.body, design: .monospaced))
-                        .scrollContentBackground(.hidden)
+                    CommandTextEditor(text: $command)
                         .padding(8)
                         .frame(minHeight: 100)
                         .background(Color(nsColor: .controlBackgroundColor))
