@@ -640,7 +640,7 @@ final class AppStateImportExportTests: XCTestCase {
         }
 
         // Import into fresh state
-        let importState = AppState()
+        let importState = cleanAppState()
         let result = importState.validateImport(data)
 
         switch result {
