@@ -38,6 +38,14 @@ final class KubernetesService {
                 process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
                 process.arguments = arguments
 
+                // GUI apps get minimal PATH — include common tool locations + Orbit's bin
+                var environment = ProcessInfo.processInfo.environment
+                let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+                let orbitBinPath = appSupport.appendingPathComponent("Orbit/bin").path
+                let existingPath = environment["PATH"] ?? "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+                environment["PATH"] = "\(orbitBinPath):\(existingPath)"
+                process.environment = environment
+
                 let stdout = Pipe()
                 let stderr = Pipe()
                 process.standardOutput = stdout
