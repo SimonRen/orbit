@@ -49,6 +49,7 @@ struct DetailView: View {
     @State private var showHistoryPopover = false
     @State private var showingUnsavedChangesOnRestore = false
     @State private var pendingRestoreIndex: Int?
+    @State private var showingK8sImportSheet = false
 
     private var environment: DevEnvironment? {
         appState.environments.first { $0.id == environmentId }
@@ -206,6 +207,21 @@ struct DetailView: View {
                         },
                         onCancel: {
                             showingAddServiceSheet = false
+                        }
+                    )
+                }
+                .sheet(isPresented: $showingK8sImportSheet) {
+                    K8sImportSheet(
+                        environmentId: environmentId,
+                        existingServiceNames: environment?.services.map(\.name) ?? [],
+                        onImport: { services in
+                            for service in services {
+                                appState.addService(to: environmentId, service: service)
+                            }
+                            showingK8sImportSheet = false
+                        },
+                        onCancel: {
+                            showingK8sImportSheet = false
                         }
                     )
                 }
@@ -369,6 +385,18 @@ struct DetailView: View {
                     )
                 }
             }
+
+            // Import from K8s button
+            Button {
+                showingK8sImportSheet = true
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "square.and.arrow.down")
+                    Text("Import from K8s")
+                }
+            }
+            .buttonStyle(.bordered)
+            .disabled(isActive || isTransitioning)
 
             // Add service button
             Button {
