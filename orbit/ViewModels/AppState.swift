@@ -100,9 +100,18 @@ final class AppState: ObservableObject {
 
     // MARK: - Initialization
 
+    /// If true, skip loading/saving config (for unit tests)
+    private let isTestMode: Bool
+
     init() {
+        self.isTestMode = false
         loadConfiguration()
         setupAutoSave()
+    }
+
+    /// Test-only initializer — no disk I/O, no auto-save
+    init(testMode: Bool) {
+        self.isTestMode = testMode
     }
 
     /// Inject managers after initialization (to avoid circular dependencies)
@@ -148,6 +157,7 @@ final class AppState: ObservableObject {
     }
 
     private func saveConfiguration() {
+        guard !isTestMode else { return }
         do {
             try configManager.save(environments: environments)
         } catch {

@@ -481,11 +481,7 @@ final class AppStateCRUDTests: XCTestCase {
 
     /// Helper to create a clean AppState with no pre-loaded environments
     private func cleanAppState() -> AppState {
-        let appState = AppState()
-        // Clear any environments loaded from disk config
-        appState.environments = []
-        appState.selectedEnvironmentId = nil
-        return appState
+        return AppState(testMode: true)
     }
 
     func testCreateEnvironmentAssignsUniqueIP() {
@@ -906,9 +902,22 @@ final class VariableResolverExtendedTests: XCTestCase {
 
 final class ConfigManagerTests: XCTestCase {
 
-    func testSaveAndLoad() throws {
-        let manager = ConfigManager.shared
+    private var tempDir: URL!
+    private var manager: ConfigManager!
 
+    override func setUp() {
+        super.setUp()
+        tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("OrbitTests-\(UUID().uuidString)", isDirectory: true)
+        manager = ConfigManager(directory: tempDir)
+    }
+
+    override func tearDown() {
+        try? FileManager.default.removeItem(at: tempDir)
+        super.tearDown()
+    }
+
+    func testSaveAndLoad() throws {
         let environments = [
             DevEnvironment(name: "Test", interfaces: [Interface(ip: "127.0.0.2")])
         ]
@@ -922,8 +931,6 @@ final class ConfigManagerTests: XCTestCase {
     }
 
     func testSaveCreatesBackup() throws {
-        let manager = ConfigManager.shared
-
         // Save initial config
         try manager.save(environments: [
             DevEnvironment(name: "First", interfaces: [Interface(ip: "127.0.0.2")])
@@ -938,11 +945,8 @@ final class ConfigManagerTests: XCTestCase {
         let loaded = try manager.load()
         XCTAssertEqual(loaded.environments[0].name, "Second")
 
-        // Backup should exist (we can verify the backup file exists)
-        let appSupport = FileManager.default.urls(
-            for: .applicationSupportDirectory, in: .userDomainMask
-        )[0].appendingPathComponent("Orbit", isDirectory: true)
-        let backupURL = appSupport.appendingPathComponent("config.backup.json")
+        // Backup should exist
+        let backupURL = tempDir.appendingPathComponent("config.backup.json")
         XCTAssertTrue(FileManager.default.fileExists(atPath: backupURL.path))
     }
 }
