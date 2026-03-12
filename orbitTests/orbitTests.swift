@@ -950,3 +950,164 @@ final class ConfigManagerTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: backupURL.path))
     }
 }
+
+// MARK: - KubernetesService Tests
+
+final class KubernetesServiceTests: XCTestCase {
+
+    func testParseContexts() {
+        let output = "docker-desktop\nminikube\nprod-cluster\n"
+        let contexts = KubernetesService.parseContexts(from: output)
+        XCTAssertEqual(contexts, ["docker-desktop", "minikube", "prod-cluster"])
+    }
+
+    func testParseContextsFiltersEmpty() {
+        let output = "\ndocker-desktop\n\n"
+        let contexts = KubernetesService.parseContexts(from: output)
+        XCTAssertEqual(contexts, ["docker-desktop"])
+    }
+
+    func testParseNamespaces() throws {
+        let json = """
+        {
+            "items": [
+                {"metadata": {"name": "default"}},
+                {"metadata": {"name": "kube-system"}},
+                {"metadata": {"name": "monitoring"}}
+            ]
+        }
+        """.data(using: .utf8)!
+        let namespaces = try KubernetesService.parseNamespaces(from: json)
+        XCTAssertEqual(namespaces, ["default", "kube-system", "monitoring"])
+    }
+
+    func testParseServices() throws {
+        let json = """
+        {
+            "items": [
+                {
+                    "metadata": {"name": "api-gateway", "namespace": "default"},
+                    "spec": {
+                        "type": "ClusterIP",
+                        "ports": [
+                            {"port": 8080, "protocol": "TCP"}
+                        ]
+                    }
+                },
+                {
+                    "metadata": {"name": "elasticsearch", "namespace": "default"},
+                    "spec": {
+                        "type": "ClusterIP",
+                        "ports": [
+                            {"port": 9200, "protocol": "TCP", "name": "http"},
+                            {"port": 9300, "protocol": "TCP", "name": "transport"}
+                        ]
+                    }
+                }
+            ]
+        }
+        """.data(using: .utf8)!
+        let services = try KubernetesService.parseServices(from: json)
+        XCTAssertEqual(services.count, 2)
+        XCTAssertEqual(services[0].name, "api-gateway")
+        XCTAssertEqual(services[0].ports.count, 1)
+        XCTAssertEqual(services[0].ports[0].port, 8080)
+        XCTAssertEqual(services[1].name, "elasticsearch")
+        XCTAssertEqual(services[1].ports.count, 2)
+    }
+
+    func testParseServicesWithZeroPorts() throws {
+        let json = """
+        {
+            "items": [
+                {
+                    "metadata": {"name": "external-svc", "namespace": "default"},
+                    "spec": {
+                        "type": "ExternalName"
+                    }
+                }
+            ]
+        }
+        """.data(using: .utf8)!
+        let services = try KubernetesService.parseServices(from: json)
+        XCTAssertEqual(services.count, 1)
+        XCTAssertFalse(services[0].hasPorts)
+    }
+
+    func testCommandGenerationSinglePort() {
+        let svc = K8sService(
+            name: "postgres",
+            namespace: "default",
+            type: "ClusterIP",
+            ports: [K8sPort(port: 5432, name: nil, transportProtocol: "TCP")]
+        )
+        let cmd = KubernetesService.generateCommand(
+            for: svc, tool: "kubectl", context: "prod-cluster"
+        )
+        XCTAssertEqual(cmd, "kubectl port-forward --address $IP svc/postgres 5432:5432 -n default --context prod-cluster")
+    }
+
+    func testCommandGenerationMultiPort() {
+        let svc = K8sService(
+            name: "elasticsearch",
+            namespace: "monitoring",
+            type: "ClusterIP",
+            ports: [
+                K8sPort(port: 9200, name: "http", transportProtocol: "TCP"),
+                K8sPort(port: 9300, name: "transport", transportProtocol: "TCP")
+            ]
+        )
+        let cmd = KubernetesService.generateCommand(
+            for: svc, tool: "orb-kubectl", context: "dev"
+        )
+        XCTAssertEqual(cmd, "orb-kubectl port-forward --address $IP svc/elasticsearch 9200:9200 9300:9300 -n monitoring --context dev")
+    }
+
+    func testPortsString() {
+        let svc = K8sService(
+            name: "es",
+            namespace: "default",
+            type: "ClusterIP",
+            ports: [
+                K8sPort(port: 9200, name: nil, transportProtocol: "TCP"),
+                K8sPort(port: 9300, name: nil, transportProtocol: "TCP")
+            ]
+        )
+        XCTAssertEqual(KubernetesService.portsString(for: svc), "9200,9300")
+    }
+
+    func testDuplicateNameSuffix() {
+        let existing = ["api-gateway", "postgres", "api-gateway-2"]
+        XCTAssertEqual(KubernetesService.deduplicateName("redis", existing: existing), "redis")
+        XCTAssertEqual(KubernetesService.deduplicateName("api-gateway", existing: existing), "api-gateway-3")
+        XCTAssertEqual(KubernetesService.deduplicateName("postgres", existing: existing), "postgres-2")
+    }
+
+    func testServiceCreation() {
+        let k8sSvc = K8sService(
+            name: "api-gateway",
+            namespace: "production",
+            type: "ClusterIP",
+            ports: [
+                K8sPort(port: 8080, name: "http", transportProtocol: "TCP"),
+                K8sPort(port: 8443, name: "https", transportProtocol: "TCP")
+            ]
+        )
+        let name = KubernetesService.deduplicateName(k8sSvc.name, existing: [])
+        let service = Service(
+            name: name,
+            ports: KubernetesService.portsString(for: k8sSvc),
+            command: KubernetesService.generateCommand(for: k8sSvc, tool: "kubectl", context: "prod")
+        )
+        XCTAssertEqual(service.name, "api-gateway")
+        XCTAssertEqual(service.ports, "8080,8443")
+        XCTAssertEqual(service.command, "kubectl port-forward --address $IP svc/api-gateway 8080:8080 8443:8443 -n production --context prod")
+        XCTAssertTrue(service.isEnabled)
+    }
+
+    func testParseMalformedJSON() {
+        let badData = "not json".data(using: .utf8)!
+        XCTAssertThrowsError(try KubernetesService.parseNamespaces(from: badData))
+        XCTAssertThrowsError(try KubernetesService.parseServices(from: badData))
+    }
+}
