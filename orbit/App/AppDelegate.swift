@@ -173,10 +173,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             .store(in: &cancellables)
     }
 
-    private func updateStatusIcon() {
-        // Icon stays the same - no color changes needed
-    }
-
     // MARK: - Popover Control
 
     @objc private func statusItemClicked(_ sender: NSStatusBarButton) {
@@ -231,20 +227,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     @objc private func showMainWindow(_ sender: Any?) {
         closePopover()
-        activateAppWithDockToggle()
+        Self.activateAppWithDockToggle()
     }
 
     /// Workaround for macOS bug where programmatic activation doesn't fully activate the app
     /// Solution: briefly activate the Dock, then reactivate our app - forces proper activation cycle
     /// Used by: Swiftness, Better Blocker, and other menubar apps
-    private func activateAppWithDockToggle() {
+    static func activateAppWithDockToggle() {
         // Step 1: Briefly activate the Dock to force a proper activation cycle
         let dockActivated = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.dock").first?.activate(options: []) ?? false
 
         // Step 2: After delay, reactivate our app (use shorter delay if Dock activation failed)
         let delay = dockActivated ? 200 : 50
         DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(delay)) {
-            Self.activateAndShowWindow()
+            activateAndShowWindow()
         }
     }
 
@@ -308,14 +304,8 @@ struct StatusMenuView: View {
             // Show Window button
             MenuRowButton(label: "Show Window") {
                 onDismiss()
-                // Use Dock toggle hack for proper window activation
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    // Briefly activate the Dock to force a proper activation cycle
-                    let dockActivated = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.dock").first?.activate(options: []) ?? false
-                    let delay = dockActivated ? 200 : 50
-                    DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(delay)) {
-                        AppDelegate.activateAndShowWindow()
-                    }
+                    AppDelegate.activateAppWithDockToggle()
                 }
             }
 

@@ -473,3 +473,476 @@ final class AppStateHistoryTests: XCTestCase {
         XCTAssertEqual(appState.environments[0].history.count, 10)
     }
 }
+
+// MARK: - AppState CRUD Tests
+
+@MainActor
+final class AppStateCRUDTests: XCTestCase {
+
+    /// Helper to create a clean AppState with no pre-loaded environments
+    private func cleanAppState() -> AppState {
+        let appState = AppState()
+        // Clear any environments loaded from disk config
+        appState.environments = []
+        appState.selectedEnvironmentId = nil
+        return appState
+    }
+
+    func testCreateEnvironmentAssignsUniqueIP() {
+        let appState = cleanAppState()
+        let env1 = appState.createEnvironment()
+        let env2 = appState.createEnvironment()
+
+        XCTAssertNotEqual(env1.interfaces[0].ip, env2.interfaces[0].ip)
+        XCTAssertEqual(appState.environments.count, 2)
+    }
+
+    func testCreateEnvironmentAssignsUniqueName() {
+        let appState = cleanAppState()
+        let env1 = appState.createEnvironment()
+        let env2 = appState.createEnvironment()
+
+        XCTAssertNotEqual(env1.name, env2.name)
+    }
+
+    func testDeleteEnvironmentCleansUpState() {
+        let appState = cleanAppState()
+        let env = appState.createEnvironment()
+        let envId = env.id
+
+        appState.selectedEnvironmentId = envId
+        appState.deleteEnvironment(envId)
+
+        XCTAssertTrue(appState.environments.isEmpty)
+        // Selection should update
+        XCTAssertNil(appState.selectedEnvironmentId)
+    }
+
+    func testDeleteEnvironmentUpdatesSelection() {
+        let appState = cleanAppState()
+        let env1 = appState.createEnvironment()
+        let env2 = appState.createEnvironment()
+
+        // Select env2, delete it - should fall back to env1
+        appState.selectedEnvironmentId = env2.id
+        appState.deleteEnvironment(env2.id)
+
+        XCTAssertEqual(appState.selectedEnvironmentId, env1.id)
+    }
+
+    func testAddServiceUpdatesCache() {
+        let appState = cleanAppState()
+        let env = appState.createEnvironment()
+
+        let service = Service(name: "test", ports: "8080", command: "echo hello")
+        appState.addService(to: env.id, service: service)
+
+        // Should be findable via cache
+        XCTAssertNotNil(appState.service(for: service.id))
+    }
+
+    func testDeleteServiceCleansUpLogs() {
+        let appState = cleanAppState()
+        let env = appState.createEnvironment()
+
+        let service = Service(name: "test", ports: "8080", command: "echo hello")
+        appState.addService(to: env.id, service: service)
+
+        // Simulate some logs
+        appState.serviceLogs[service.id] = [
+            LogEntry(message: "test log", stream: .stdout)
+        ]
+
+        appState.deleteService(from: env.id, serviceId: service.id)
+
+        // Logs should be cleaned up
+        XCTAssertNil(appState.serviceLogs[service.id])
+        XCTAssertNil(appState.service(for: service.id))
+    }
+
+    func testMoveEnvironmentUpdatesOrder() {
+        let appState = cleanAppState()
+        let env1 = appState.createEnvironment()
+        let env2 = appState.createEnvironment()
+        let env3 = appState.createEnvironment()
+
+        // Move env3 to position 0
+        appState.moveEnvironment(from: IndexSet(integer: 2), to: 0)
+
+        let sorted = appState.sortedEnvironments
+        XCTAssertEqual(sorted[0].id, env3.id)
+    }
+}
+
+// MARK: - AppState Log Management Tests
+
+@MainActor
+final class AppStateLogTests: XCTestCase {
+
+    func testAppendLogStoresInSeparateStorage() {
+        let appState = AppState()
+        let env = appState.createEnvironment()
+        let service = Service(name: "test", ports: "80", command: "echo hi")
+        appState.addService(to: env.id, service: service)
+
+        // Logs should be empty initially
+        XCTAssertTrue(appState.logs(for: service.id).isEmpty)
+
+        // Simulate log via public interface
+        appState.serviceLogs[service.id] = [
+            LogEntry(message: "hello", stream: .stdout)
+        ]
+
+        XCTAssertEqual(appState.logs(for: service.id).count, 1)
+        XCTAssertEqual(appState.logs(for: service.id)[0].message, "hello")
+    }
+
+    func testClearLogs() {
+        let appState = AppState()
+        let serviceId = UUID()
+        appState.serviceLogs[serviceId] = [
+            LogEntry(message: "log1", stream: .stdout),
+            LogEntry(message: "log2", stream: .stderr),
+        ]
+
+        appState.clearLogs(for: serviceId)
+
+        XCTAssertTrue(appState.logs(for: serviceId).isEmpty)
+    }
+
+    func testLogsForUnknownServiceReturnsEmpty() {
+        let appState = AppState()
+        XCTAssertTrue(appState.logs(for: UUID()).isEmpty)
+    }
+}
+
+// MARK: - Import/Export Tests
+
+@MainActor
+final class AppStateImportExportTests: XCTestCase {
+
+    /// Helper to create a clean AppState with no pre-loaded environments
+    private func cleanAppState() -> AppState {
+        let appState = AppState()
+        appState.environments = []
+        appState.selectedEnvironmentId = nil
+        return appState
+    }
+
+    func testExportImportRoundtrip() throws {
+        let appState = cleanAppState()
+        let env = appState.createEnvironment()
+        let envId = env.id
+
+        let service = Service(name: "web", ports: "80,443", command: "echo serve")
+        appState.addService(to: envId, service: service)
+
+        // Export
+        guard let data = appState.exportEnvironment(envId) else {
+            XCTFail("Export returned nil")
+            return
+        }
+
+        // Import into fresh state
+        let importState = AppState()
+        let result = importState.validateImport(data)
+
+        switch result {
+        case .success(let preview):
+            XCTAssertEqual(preview.originalName, env.name)
+            XCTAssertEqual(preview.services.count, 1)
+            XCTAssertEqual(preview.services[0].name, "web")
+            XCTAssertEqual(preview.services[0].ports, "80,443")
+            XCTAssertFalse(preview.hasNameConflict)
+            XCTAssertFalse(preview.hasIPConflicts)
+        case .failure(let error):
+            XCTFail("Import validation failed: \(error)")
+        }
+    }
+
+    func testImportDetectsNameConflict() {
+        let appState = cleanAppState()
+        let env = appState.createEnvironment()
+
+        guard let data = appState.exportEnvironment(env.id) else {
+            XCTFail("Export returned nil")
+            return
+        }
+
+        // Import into same state (same name exists)
+        let result = appState.validateImport(data)
+
+        switch result {
+        case .success(let preview):
+            XCTAssertTrue(preview.hasNameConflict)
+            XCTAssertNotEqual(preview.suggestedName, preview.originalName)
+        case .failure(let error):
+            XCTFail("Import validation failed: \(error)")
+        }
+    }
+
+    func testImportDetectsIPConflict() {
+        let appState = cleanAppState()
+        let env = appState.createEnvironment()
+
+        guard let data = appState.exportEnvironment(env.id) else {
+            XCTFail("Export returned nil")
+            return
+        }
+
+        // Import into same state (same IPs exist)
+        let result = appState.validateImport(data)
+
+        switch result {
+        case .success(let preview):
+            XCTAssertTrue(preview.hasIPConflicts)
+            // Suggested IPs should be different from original
+            XCTAssertNotEqual(
+                preview.suggestedInterfaces.map { $0.ip },
+                preview.originalInterfaces.map { $0.ip }
+            )
+        case .failure(let error):
+            XCTFail("Import validation failed: \(error)")
+        }
+    }
+
+    func testImportRejectsNonLoopbackIP() {
+        // Create JSON with a non-loopback IP
+        let json = """
+        {
+            "version": "1.0",
+            "exportedAt": "2024-01-01T00:00:00Z",
+            "environment": {
+                "name": "Bad Env",
+                "interfaces": [{"ip": "192.168.1.1"}],
+                "services": []
+            }
+        }
+        """
+
+        let appState = cleanAppState()
+        let result = appState.validateImport(json.data(using: .utf8)!)
+
+        switch result {
+        case .success:
+            XCTFail("Should have rejected non-loopback IP")
+        case .failure(let error):
+            // Should fail with invalid IP
+            XCTAssertTrue(error.localizedDescription.contains("192.168.1.1"))
+        }
+    }
+
+    func testImportRejects127001() {
+        let json = """
+        {
+            "version": "1.0",
+            "exportedAt": "2024-01-01T00:00:00Z",
+            "environment": {
+                "name": "Localhost Env",
+                "interfaces": [{"ip": "127.0.0.1"}],
+                "services": []
+            }
+        }
+        """
+
+        let appState = cleanAppState()
+        let result = appState.validateImport(json.data(using: .utf8)!)
+
+        switch result {
+        case .success:
+            XCTFail("Should have rejected 127.0.0.1")
+        case .failure:
+            break // Expected
+        }
+    }
+}
+
+// MARK: - ValidationService Extended Tests
+
+final class ValidationServiceExtendedTests: XCTestCase {
+
+    func testValidateIPRejects127001() {
+        let validation = ValidationService.shared
+
+        // 127.0.0.1 is the system default loopback — rejected as an alias target
+        XCTAssertThrowsError(try validation.validateIP("127.0.0.1").get())
+    }
+
+    func testValidateIPBoundaryOctets() {
+        let validation = ValidationService.shared
+
+        // 127.0.0.0 should be valid
+        XCTAssertNoThrow(try validation.validateIP("127.0.0.0").get())
+
+        // 127.255.255.255 should be valid
+        XCTAssertNoThrow(try validation.validateIP("127.255.255.255").get())
+
+        // Octet > 255 should fail
+        XCTAssertThrowsError(try validation.validateIP("127.0.0.256").get())
+        XCTAssertThrowsError(try validation.validateIP("127.256.0.1").get())
+    }
+
+    func testValidateIPUniqueness() {
+        let validation = ValidationService.shared
+
+        let environments = [
+            DevEnvironment(name: "Env1", interfaces: [Interface(ip: "127.0.0.2")]),
+            DevEnvironment(name: "Env2", interfaces: [Interface(ip: "127.0.0.3")])
+        ]
+
+        // Should fail - IP already in use
+        let result1 = validation.validateIPUniqueness("127.0.0.2", in: environments)
+        XCTAssertThrowsError(try result1.get())
+
+        // Should pass - IP not in use
+        let result2 = validation.validateIPUniqueness("127.0.0.4", in: environments)
+        XCTAssertNoThrow(try result2.get())
+
+        // Should pass when excluding the environment that owns the IP
+        let result3 = validation.validateIPUniqueness(
+            "127.0.0.2",
+            in: environments,
+            excludingEnvironmentId: environments[0].id
+        )
+        XCTAssertNoThrow(try result3.get())
+    }
+
+    func testValidateEnvironmentNameUniqueness() {
+        let validation = ValidationService.shared
+
+        let environments = [
+            DevEnvironment(name: "Production"),
+            DevEnvironment(name: "Staging")
+        ]
+
+        // Case-insensitive duplicate
+        let result1 = validation.validateEnvironmentName("production", in: environments)
+        XCTAssertThrowsError(try result1.get())
+
+        // Unique name
+        let result2 = validation.validateEnvironmentName("Development", in: environments)
+        XCTAssertNoThrow(try result2.get())
+
+        // Empty name
+        let result3 = validation.validateEnvironmentName("", in: environments)
+        XCTAssertThrowsError(try result3.get())
+    }
+
+    func testValidateServiceAllFields() {
+        let validation = ValidationService.shared
+
+        // All valid
+        let errors1 = validation.validateService(name: "web", ports: "80,443", command: "echo hi")
+        XCTAssertTrue(errors1.isEmpty)
+
+        // All invalid
+        let errors2 = validation.validateService(name: "", ports: "", command: "")
+        XCTAssertEqual(errors2.count, 3)
+
+        // Partial invalid
+        let errors3 = validation.validateService(name: "web", ports: "invalid", command: "echo hi")
+        XCTAssertEqual(errors3.count, 1)
+    }
+
+    func testValidatePortEdgeCases() {
+        let validation = ValidationService.shared
+
+        // Port 1 (minimum valid)
+        XCTAssertNoThrow(try validation.validatePorts("1").get())
+
+        // Port 65535 (maximum valid)
+        XCTAssertNoThrow(try validation.validatePorts("65535").get())
+
+        // Port 65536 (out of range)
+        XCTAssertThrowsError(try validation.validatePorts("65536").get())
+
+        // Negative port
+        XCTAssertThrowsError(try validation.validatePorts("-1").get())
+
+        // Whitespace handling
+        XCTAssertNoThrow(try validation.validatePorts(" 80 , 443 ").get())
+    }
+}
+
+// MARK: - VariableResolver Extended Tests
+
+final class VariableResolverExtendedTests: XCTestCase {
+
+    func testNoVariablesInCommand() {
+        let command = "echo hello world"
+        let interfaces = [Interface(ip: "127.0.0.2")]
+
+        let resolved = VariableResolver.resolve(command, interfaces: interfaces)
+        XCTAssertEqual(resolved, "echo hello world")
+    }
+
+    func testUnresolvedVariablePreserved() {
+        // $IP3 when only 2 interfaces exist
+        let command = "cmd $IP $IP2 $IP3"
+        let interfaces = [Interface(ip: "127.0.0.2"), Interface(ip: "127.0.0.3")]
+
+        let resolved = VariableResolver.resolve(command, interfaces: interfaces)
+        XCTAssertEqual(resolved, "cmd 127.0.0.2 127.0.0.3 $IP3")
+    }
+
+    func testEmptyInterfaceList() {
+        let command = "cmd $IP"
+        let interfaces: [Interface] = []
+
+        let resolved = VariableResolver.resolve(command, interfaces: interfaces)
+        XCTAssertEqual(resolved, "cmd $IP")
+    }
+
+    func testIPVariableInMiddleOfString() {
+        let command = "--bind-address=$IP:8080"
+        let interfaces = [Interface(ip: "127.0.0.2")]
+
+        let resolved = VariableResolver.resolve(command, interfaces: interfaces)
+        XCTAssertEqual(resolved, "--bind-address=127.0.0.2:8080")
+    }
+}
+
+// MARK: - ConfigManager Tests
+
+final class ConfigManagerTests: XCTestCase {
+
+    func testSaveAndLoad() throws {
+        let manager = ConfigManager.shared
+
+        let environments = [
+            DevEnvironment(name: "Test", interfaces: [Interface(ip: "127.0.0.2")])
+        ]
+
+        try manager.save(environments: environments)
+        let loaded = try manager.load()
+
+        XCTAssertEqual(loaded.environments.count, 1)
+        XCTAssertEqual(loaded.environments[0].name, "Test")
+        XCTAssertEqual(loaded.environments[0].interfaces[0].ip, "127.0.0.2")
+    }
+
+    func testSaveCreatesBackup() throws {
+        let manager = ConfigManager.shared
+
+        // Save initial config
+        try manager.save(environments: [
+            DevEnvironment(name: "First", interfaces: [Interface(ip: "127.0.0.2")])
+        ])
+
+        // Save again - should create backup of "First"
+        try manager.save(environments: [
+            DevEnvironment(name: "Second", interfaces: [Interface(ip: "127.0.0.3")])
+        ])
+
+        // Load current - should be "Second"
+        let loaded = try manager.load()
+        XCTAssertEqual(loaded.environments[0].name, "Second")
+
+        // Backup should exist (we can verify the backup file exists)
+        let appSupport = FileManager.default.urls(
+            for: .applicationSupportDirectory, in: .userDomainMask
+        )[0].appendingPathComponent("Orbit", isDirectory: true)
+        let backupURL = appSupport.appendingPathComponent("config.backup.json")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: backupURL.path))
+    }
+}

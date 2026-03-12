@@ -14,7 +14,6 @@ struct Service: Identifiable, Codable, Equatable {
     var status: ServiceStatus = .stopped
     var restartCount: Int = 0
     var lastError: String?
-    var logs: [LogEntry] = []
 
     // MARK: - Codable
 

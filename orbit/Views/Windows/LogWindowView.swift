@@ -13,6 +13,11 @@ struct LogWindowView: View {
         appState.service(for: serviceId)
     }
 
+    /// Logs stored separately for performance (doesn't trigger full environments diff)
+    private var logs: [LogEntry] {
+        appState.logs(for: serviceId)
+    }
+
     var body: some View {
         Group {
             if let service = service {
@@ -45,10 +50,10 @@ struct LogWindowView: View {
                     ScrollViewReader { proxy in
                         ScrollView {
                             LazyVStack(alignment: .leading, spacing: 2) {
-                                if service.logs.isEmpty {
+                                if logs.isEmpty {
                                     emptyStateView
                                 } else {
-                                    ForEach(service.logs) { entry in
+                                    ForEach(logs) { entry in
                                         LogEntryView(entry: entry)
                                             .id(entry.id)
                                     }
@@ -59,8 +64,8 @@ struct LogWindowView: View {
                         }
                         .font(.system(.body, design: .monospaced))
                         .background(Color(nsColor: .textBackgroundColor))
-                        .onChange(of: service.logs.count) { _ in
-                            if autoScroll, let lastId = service.logs.last?.id {
+                        .onChange(of: logs.count) { _ in
+                            if autoScroll, let lastId = logs.last?.id {
                                 withAnimation(.easeOut(duration: 0.2)) {
                                     proxy.scrollTo(lastId, anchor: .bottom)
                                 }
@@ -77,19 +82,19 @@ struct LogWindowView: View {
 
                         Spacer()
 
-                        Text("\(service.logs.count) entries")
+                        Text("\(logs.count) entries")
                             .font(.caption)
                             .foregroundColor(.secondary)
 
                         Button("Copy All") {
                             copyAllLogs(service)
                         }
-                        .disabled(service.logs.isEmpty)
+                        .disabled(logs.isEmpty)
 
                         Button("Clear") {
                             appState.clearLogs(for: serviceId)
                         }
-                        .disabled(service.logs.isEmpty)
+                        .disabled(logs.isEmpty)
                     }
                     .padding()
                 }
@@ -121,7 +126,7 @@ struct LogWindowView: View {
     }
 
     private func copyAllLogs(_ service: Service) {
-        let logText = service.logs.map { entry in
+        let logText = logs.map { entry in
             "\(entry.formattedTimestamp) \(entry.message)"
         }.joined(separator: "\n")
 

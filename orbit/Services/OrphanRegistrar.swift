@@ -1,4 +1,7 @@
 import Foundation
+import os.log
+
+private let logger = Logger(subsystem: "com.orbit.app", category: "OrphanRegistrar")
 
 /// Manages orphan cleanup registration with the privileged helper
 ///
@@ -24,9 +27,9 @@ final class OrphanRegistrar: ObservableObject {
         do {
             try await helperClient.registerApp(pid: myPid)
             isRegistered = true
-            NSLog("OrphanRegistrar: Registered with helper (PID: \(myPid))")
+            logger.info("OrphanRegistrar: Registered with helper (PID: \(myPid))")
         } catch {
-            NSLog("OrphanRegistrar: Failed to register: \(error)")
+            logger.warning("Failed to register: \(error.localizedDescription)")
             // Non-fatal - app continues without helper-based orphan protection
         }
     }
@@ -38,9 +41,9 @@ final class OrphanRegistrar: ObservableObject {
         do {
             try await helperClient.unregisterApp()
             isRegistered = false
-            NSLog("OrphanRegistrar: Unregistered (graceful shutdown)")
+            logger.info("OrphanRegistrar: Unregistered (graceful shutdown)")
         } catch {
-            NSLog("OrphanRegistrar: Failed to unregister: \(error)")
+            logger.warning("Failed to unregister: \(error.localizedDescription)")
             // Non-fatal - helper will detect app death anyway
         }
     }
@@ -72,9 +75,9 @@ final class OrphanRegistrar: ObservableObject {
 
         do {
             try await helperClient.updateProcessGroups(pgids)
-            NSLog("OrphanRegistrar: Synced \(pgids.count) process groups")
+            logger.info("OrphanRegistrar: Synced \(pgids.count) process groups")
         } catch {
-            NSLog("OrphanRegistrar: Failed to sync process groups: \(error)")
+            logger.warning("Failed to sync process groups: \(error.localizedDescription)")
             // Helper may have restarted - mark as unregistered to force re-registration
             isRegistered = false
             // Retry registration and sync once

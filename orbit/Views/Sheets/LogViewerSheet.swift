@@ -4,6 +4,7 @@ import AppKit
 /// Sheet for viewing service logs
 struct LogViewerSheet: View {
     let service: Service
+    let logs: [LogEntry]
     let onClear: () -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -49,10 +50,10 @@ struct LogViewerSheet: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 2) {
-                        if service.logs.isEmpty {
+                        if logs.isEmpty {
                             emptyStateView
                         } else {
-                            ForEach(service.logs) { entry in
+                            ForEach(logs) { entry in
                                 LogEntryView(entry: entry)
                                     .id(entry.id)
                             }
@@ -63,8 +64,8 @@ struct LogViewerSheet: View {
                 }
                 .font(.system(.body, design: .monospaced))
                 .background(Color(nsColor: .textBackgroundColor))
-                .onChange(of: service.logs.count) { _ in
-                    if autoScroll, let lastId = service.logs.last?.id {
+                .onChange(of: logs.count) { _ in
+                    if autoScroll, let lastId = logs.last?.id {
                         withAnimation(.easeOut(duration: 0.2)) {
                             proxy.scrollTo(lastId, anchor: .bottom)
                         }
@@ -81,19 +82,19 @@ struct LogViewerSheet: View {
 
                 Spacer()
 
-                Text("\(service.logs.count) entries")
+                Text("\(logs.count) entries")
                     .font(.caption)
                     .foregroundColor(.secondary)
 
                 Button("Copy All") {
                     copyAllLogs()
                 }
-                .disabled(service.logs.isEmpty)
+                .disabled(logs.isEmpty)
 
                 Button("Clear") {
                     onClear()
                 }
-                .disabled(service.logs.isEmpty)
+                .disabled(logs.isEmpty)
             }
             .padding()
         }
@@ -118,7 +119,7 @@ struct LogViewerSheet: View {
     }
 
     private func copyAllLogs() {
-        let logText = service.logs.map { entry in
+        let logText = logs.map { entry in
             "\(entry.formattedTimestamp) \(entry.message)"
         }.joined(separator: "\n")
 
@@ -153,15 +154,15 @@ struct LogEntryView: View {
                 command: "kubectl port-forward"
             )
             s.status = .running
-            s.logs = [
-                LogEntry(message: "Starting service...", stream: .stdout),
-                LogEntry(message: "Connecting to cluster...", stream: .stdout),
-                LogEntry(message: "Warning: deprecated API", stream: .stderr),
-                LogEntry(message: "Port forwarding established on 127.0.0.2:8080", stream: .stdout),
-                LogEntry(message: "Ready to accept connections", stream: .stdout),
-            ]
             return s
         }(),
+        logs: [
+            LogEntry(message: "Starting service...", stream: .stdout),
+            LogEntry(message: "Connecting to cluster...", stream: .stdout),
+            LogEntry(message: "Warning: deprecated API", stream: .stderr),
+            LogEntry(message: "Port forwarding established on 127.0.0.2:8080", stream: .stdout),
+            LogEntry(message: "Ready to accept connections", stream: .stdout),
+        ],
         onClear: {}
     )
 }

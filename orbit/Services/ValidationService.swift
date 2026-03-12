@@ -70,6 +70,11 @@ final class ValidationService {
             }
         }
 
+        // Reject 127.0.0.1 — it's the system default loopback, not an alias
+        if trimmed == "127.0.0.1" {
+            return .failure(.ipNotInLoopbackRange)
+        }
+
         return .success(())
     }
 
