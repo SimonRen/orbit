@@ -17,6 +17,7 @@ struct K8sImportSheet: View {
     @State private var selectedNamespace: String?
     @State private var services: [K8sService] = []
     @State private var selectedServiceIds: Set<String> = []
+    @State private var allSelectedServices: [String: K8sService] = [:]  // accumulated across namespaces
     @State private var selectedTool: String = "kubectl"
 
     @State private var namespaceSearch: String = ""
@@ -41,7 +42,7 @@ struct K8sImportSheet: View {
         return services.filter { $0.name.localizedCaseInsensitiveContains(serviceSearch) }
     }
 
-    private var selectedCount: Int { selectedServiceIds.count }
+    private var selectedCount: Int { allSelectedServices.count }
 
     private var orbKubectlInstalled: Bool {
         ToolManager.shared.orbKubectlStatus != .notInstalled
@@ -174,6 +175,16 @@ struct K8sImportSheet: View {
                                     Text(ns)
                                         .font(.system(size: 12))
                                     Spacer()
+                                    let nsCount = allSelectedServices.values.filter { $0.namespace == ns }.count
+                                    if nsCount > 0 {
+                                        Text("\(nsCount)")
+                                            .font(.system(size: 10, weight: .medium))
+                                            .foregroundColor(.white)
+                                            .padding(.horizontal, 5)
+                                            .padding(.vertical, 1)
+                                            .background(Color.accentColor)
+                                            .cornerRadius(8)
+                                    }
                                 }
                                 .padding(.horizontal, 8)
                                 .padding(.vertical, 6)
@@ -263,8 +274,10 @@ struct K8sImportSheet: View {
             guard canSelect else { return }
             if isSelected {
                 selectedServiceIds.remove(svc.id)
+                allSelectedServices.removeValue(forKey: svc.id)
             } else {
                 selectedServiceIds.insert(svc.id)
+                allSelectedServices[svc.id] = svc
             }
         } label: {
             HStack(spacing: 0) {
@@ -364,6 +377,7 @@ struct K8sImportSheet: View {
         selectedNamespace = nil
         services = []
         selectedServiceIds = []
+        allSelectedServices = [:]
         errorMessage = nil
         fetchTask?.cancel()
         fetchTask = Task {
@@ -388,7 +402,6 @@ struct K8sImportSheet: View {
     private func loadServices() {
         guard let ns = selectedNamespace else { return }
         isLoadingServices = true
-        selectedServiceIds = []
         serviceSearch = ""
         fetchTask?.cancel()
         fetchTask = Task {
@@ -397,6 +410,8 @@ struct K8sImportSheet: View {
                 guard !Task.isCancelled else { return }
                 await MainActor.run {
                     services = svcs
+                    // Restore checkmarks for services previously selected in this namespace
+                    selectedServiceIds = Set(svcs.map(\.id).filter { allSelectedServices[$0] != nil })
                     isLoadingServices = false
                 }
             } catch {
@@ -413,11 +428,11 @@ struct K8sImportSheet: View {
     // MARK: - Import
 
     private func importSelected() {
-        let selectedServices = services.filter { selectedServiceIds.contains($0.id) }
+        let selected = allSelectedServices.values.sorted { $0.id < $1.id }
         var existingNames = existingServiceNames
         var newServices: [Service] = []
 
-        for svc in selectedServices {
+        for svc in selected {
             let name = KubernetesService.deduplicateName(svc.name, existing: existingNames)
             existingNames.append(name)
 
