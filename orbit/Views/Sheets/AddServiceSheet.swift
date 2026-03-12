@@ -184,7 +184,7 @@ struct AddServiceSheet: View {
             VStack(spacing: 6) {
                 SampleCommandRow(
                     title: "Kubernetes Port Forward",
-                    command: "kubectl port-forward --address $IP svc/my-service 5432:5432 --context my-cluster"
+                    command: "kubectl port-forward --address $IP svc/my-service 5432:5432 -n my-namespace --context my-cluster"
                 )
 
                 SampleCommandRow(
