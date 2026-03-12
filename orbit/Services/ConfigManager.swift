@@ -40,10 +40,12 @@ final class ConfigManager {
 
     private let fileManager = FileManager.default
 
+    /// Base directory for config storage (injectable for testing)
+    private let baseDirectory: URL
+
     /// Application support directory path
     private var appSupportDirectory: URL {
-        let paths = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)
-        return paths[0].appendingPathComponent("Orbit", isDirectory: true)
+        baseDirectory
     }
 
     /// Configuration file path
@@ -51,7 +53,15 @@ final class ConfigManager {
         appSupportDirectory.appendingPathComponent("config.json")
     }
 
-    private init() {}
+    private init() {
+        let paths = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)
+        self.baseDirectory = paths[0].appendingPathComponent("Orbit", isDirectory: true)
+    }
+
+    /// Creates a ConfigManager with a custom directory (for testing)
+    init(directory: URL) {
+        self.baseDirectory = directory
+    }
 
     // MARK: - Public Methods
 
