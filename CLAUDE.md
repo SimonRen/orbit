@@ -105,7 +105,12 @@ Orbit is a macOS SwiftUI app for managing development environment port forwardin
 
 - `orbit/` - Main app source (SwiftUI views, models, services)
 - `orbitHelper/` - Privileged helper daemon (runs as root via XPC)
-- `orbitTests/` - Unit tests
+- `orbitTests/` - Unit tests (~50 tests across 7 suites: CRUD, logs, import/export, validation, variable resolver, config manager)
+
+### Conventions
+
+- Logging: Use `os.Logger(subsystem: "com.orbit.app", category: "ClassName")` — not `print()` or `NSLog`
+- Validation: All IP/service validation goes through `ValidationService` (single source of truth for rules like rejecting `127.0.0.1`)
 
 ### Key Components
 
@@ -124,12 +129,14 @@ Bump `HelperConstants.helperVersion` when changing helper behavior—the app can
 
 **AppState (`orbit/ViewModels/AppState.swift`)**: Central ObservableObject holding all application state. Manages:
 - Environment/service CRUD operations
-- Activation/deactivation with transition state tracking
+- Activation/deactivation with transition state tracking and `isShuttingDown` guard
 - Toggle cooldown (500ms) to prevent rapid clicks
 - Process lifecycle coordination
 - Import/export of environment configurations
+- Service logs stored separately in `serviceLogs: [UUID: [LogEntry]]` (decoupled from `environments` publisher to avoid excessive SwiftUI diffs)
+- Stale loopback alias cleanup on launch (only removes aliases matching saved environments)
 
-**ProcessManager (`orbit/Services/ProcessManager.swift`)**: Spawns and monitors service processes. Each service runs in its own process group (`setpgid`). Kills entire process tree on stop using `pgrep -P` to find child processes recursively.
+**ProcessManager (`orbit/Services/ProcessManager.swift`)**: Spawns and monitors service processes. Each service runs in its own process group (PGID == PID, set atomically via `POSIX_SPAWN_SETPGROUP`). Stops use `killpg` to signal the entire group (SIGTERM → poll → SIGKILL). Preserves user's shell PATH and prepends Orbit's bin directory.
 
 **NetworkManager (`orbit/Services/NetworkManager.swift`)**: Communicates with the privileged helper via XPC to add/remove interface aliases.
 
@@ -158,6 +165,8 @@ Commands use `$IP`, `$IP2`, `$IP3` etc. which resolve to the environment's inter
 - `interfaces[1]` → `$IP2`
 - `interfaces[n]` → `$IP{n+1}`
 
+Replacement uses regex with negative lookahead (`(?!\d)`) to prevent `$IP` from partially matching inside `$IP2`, `$IP3`, etc.
+
 ### Import/Export
 
 **Single environment**: Export to `.orbit.json` files and import back. Export includes environment name, interfaces, and services. Import auto-detects name/IP conflicts and suggests resolutions.
@@ -172,9 +181,13 @@ Key files:
 - `DevEnvironment.history` - Array of `HistorySnapshot` (newest first)
 - `AppState.restoreFromHistory()` - Restores to a previous snapshot (reversible)
 
+### Shutdown Coordination
+
+`AppState.isShuttingDown` prevents activation tasks from completing after quit begins. The activation Task checks this flag after each `await` to avoid races where a slow network call completes during shutdown and re-enables an environment.
+
 ### Configuration
 
-Persisted to `~/Library/Application Support/Orbit/config.json`. Runtime state (isEnabled, isTransitioning, service status, logs) is not persisted.
+Persisted to `~/Library/Application Support/Orbit/config.json` with automatic backup to `config.backup.json` before each save. On load, if the main config has a `DecodingError`, it falls back to the backup; I/O errors are surfaced directly. Runtime state (isEnabled, isTransitioning, service status, logs) is not persisted.
 
 ## orb-kubectl Tool
 

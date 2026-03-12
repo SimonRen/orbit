@@ -51,14 +51,13 @@ final class ProcessManager {
         process.arguments = ["-c", resolvedCommand]
         process.currentDirectoryURL = FileManager.default.homeDirectoryForCurrentUser
 
-        // Setup environment
+        // Setup environment - preserve user's PATH and prepend Orbit's bin directory
         var environment = ProcessInfo.processInfo.environment
 
-        // Prepend Orbit's bin directory (for orb-kubectl) to PATH
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         let orbitBinPath = appSupport.appendingPathComponent("Orbit/bin").path
-        let systemPath = "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-        environment["PATH"] = "\(orbitBinPath):\(systemPath)"
+        let existingPath = environment["PATH"] ?? "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+        environment["PATH"] = "\(orbitBinPath):\(existingPath)"
         process.environment = environment
 
         // Setup pipes for stdout/stderr

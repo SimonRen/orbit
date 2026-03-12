@@ -1,4 +1,7 @@
 import Foundation
+import os.log
+
+private let logger = Logger(subsystem: "com.orbit.app", category: "ConfigManager")
 
 /// Configuration file structure
 struct AppConfig: Codable {
@@ -52,7 +55,7 @@ final class ConfigManager {
 
     // MARK: - Public Methods
 
-    /// Load configuration from disk
+    /// Load configuration from disk (falls back to backup if main config is corrupted)
     /// - Returns: AppConfig with environments, or empty config if file doesn't exist
     func load() throws -> AppConfig {
         // Return empty config if file doesn't exist
@@ -66,19 +69,39 @@ final class ConfigManager {
             let config = try decoder.decode(AppConfig.self, from: data)
             return config
         } catch let error as DecodingError {
-            // Log the specific decoding error for debugging
-            print("Config decoding error: \(error)")
+            // Config is corrupted — try loading from backup
+            logger.error("Config corrupted: \(String(describing: error))")
+            let backupURL = appSupportDirectory.appendingPathComponent("config.backup.json")
+            if fileManager.fileExists(atPath: backupURL.path),
+               let backupData = try? Data(contentsOf: backupURL),
+               let backupConfig = try? JSONDecoder().decode(AppConfig.self, from: backupData) {
+                logger.info("Restored config from backup")
+                try? backupData.write(to: configFileURL, options: .atomic)
+                return backupConfig
+            }
             throw ConfigError.corruptedFile
         } catch {
+            // I/O error — don't silently fall back to backup, surface the real error
             throw ConfigError.loadFailed(error)
         }
     }
 
-    /// Save environments to disk
+    /// Save environments to disk (creates a backup of the previous config)
     /// - Parameter environments: Array of environments to persist
     func save(environments: [DevEnvironment]) throws {
         // Ensure directory exists
         try createDirectoryIfNeeded()
+
+        // Backup existing config before overwriting
+        if fileManager.fileExists(atPath: configFileURL.path) {
+            let backupURL = appSupportDirectory.appendingPathComponent("config.backup.json")
+            do {
+                try? fileManager.removeItem(at: backupURL)
+                try fileManager.copyItem(at: configFileURL, to: backupURL)
+            } catch {
+                logger.warning("Failed to create config backup: \(error.localizedDescription)")
+            }
+        }
 
         let config = AppConfig(environments: environments)
         let encoder = JSONEncoder()

@@ -1,6 +1,9 @@
 import Foundation
 import Combine
 import ZIPFoundation
+import os.log
+
+private let logger = Logger(subsystem: "com.orbit.app", category: "AppState")
 
 /// Central application state - single source of truth
 @MainActor
@@ -13,6 +16,9 @@ final class AppState: ObservableObject {
     @Published var lastError: AppError?
     @Published var showHelperInstallPrompt: Bool = false
     @Published var showHelperUpgradePrompt: Bool = false
+
+    /// Logs stored separately to avoid triggering full environments publisher on every log line
+    @Published var serviceLogs: [UUID: [LogEntry]] = [:]
 
     /// Whether the privileged helper is installed
     var isHelperInstalled: Bool {
@@ -38,6 +44,9 @@ final class AppState: ObservableObject {
 
     /// Cache for O(1) service-to-environment lookup (serviceId -> environmentId)
     private var serviceToEnvironmentCache: [UUID: UUID] = [:]
+
+    /// Flag to prevent activation tasks from completing during shutdown
+    private var isShuttingDown = false
 
     // MARK: - Dependencies
 
@@ -101,6 +110,15 @@ final class AppState: ObservableObject {
         self.processManager = processManager
         self.networkManager = networkManager
         setupProcessManagerCallbacks()
+
+        // Clean up stale loopback aliases from previous crashes
+        // Only clean up IPs that belong to our saved environments (not all unknown aliases,
+        // since other tools may legitimately use loopback aliases)
+        Task {
+            guard networkManager.isHelperInstalled else { return }
+            let knownIPs = Set(environments.flatMap { $0.interfaceIPs })
+            await networkManager.cleanupOrphanedAliases(ownedIPs: knownIPs)
+        }
     }
 
     // MARK: - Configuration Loading/Saving
@@ -133,7 +151,7 @@ final class AppState: ObservableObject {
         do {
             try configManager.save(environments: environments)
         } catch {
-            print("Failed to save configuration: \(error)")
+            logger.error("Failed to save configuration: \(error.localizedDescription)")
         }
     }
 
@@ -298,11 +316,10 @@ final class AppState: ObservableObject {
               let serviceIndex = environments[envIndex].services.firstIndex(where: { $0.id == service.id })
         else { return }
 
-        // Preserve runtime state
+        // Preserve runtime state (logs are stored separately in serviceLogs)
         var updated = service
         updated.status = environments[envIndex].services[serviceIndex].status
         updated.restartCount = environments[envIndex].services[serviceIndex].restartCount
-        updated.logs = environments[envIndex].services[serviceIndex].logs
         updated.lastError = environments[envIndex].services[serviceIndex].lastError
 
         environments[envIndex].services[serviceIndex] = updated
@@ -320,9 +337,10 @@ final class AppState: ObservableObject {
             processManager?.stopProcess(for: serviceId) { }
         }
 
-        // Clean up cooldown tracking and cache
+        // Clean up cooldown tracking, cache, and logs
         lastServiceToggleTime.removeValue(forKey: serviceId)
         serviceToEnvironmentCache.removeValue(forKey: serviceId)
+        serviceLogs.removeValue(forKey: serviceId)
 
         environments[envIndex].services.remove(at: serviceIndex)
 
@@ -420,20 +438,25 @@ final class AppState: ObservableObject {
                 // 1. Bring up interfaces
                 try await networkManager.activateInterfaces(env.interfaces)
 
-                // 2. Mark environment as enabled
-                if let idx = environments.firstIndex(where: { $0.id == id }) {
-                    environments[idx].isEnabled = true
-                    environments[idx].isTransitioning = false
+                // Bail if shutdown started or environment was deactivated while awaiting
+                guard !isShuttingDown,
+                      let idx = environments.firstIndex(where: { $0.id == id }),
+                      environments[idx].isTransitioning
+                else { return }
 
-                    // 3. Start enabled services
-                    for serviceIndex in environments[idx].services.indices {
-                        let service = environments[idx].services[serviceIndex]
-                        if service.isEnabled {
-                            startService(serviceId: service.id, in: idx)
-                        }
+                // 2. Mark environment as enabled
+                environments[idx].isEnabled = true
+                environments[idx].isTransitioning = false
+
+                // 3. Start enabled services
+                for serviceIndex in environments[idx].services.indices {
+                    let service = environments[idx].services[serviceIndex]
+                    if service.isEnabled {
+                        startService(serviceId: service.id, in: idx)
                     }
                 }
             } catch {
+                guard !isShuttingDown else { return }
                 // Clear transitioning state on error
                 if let idx = environments.firstIndex(where: { $0.id == id }) {
                     environments[idx].isTransitioning = false
@@ -620,19 +643,24 @@ final class AppState: ObservableObject {
     // MARK: - Log Management
 
     private func appendLog(serviceId: UUID, entry: LogEntry) {
-        guard let (envIndex, serviceIndex) = findServiceIndices(serviceId: serviceId) else { return }
-
-        environments[envIndex].services[serviceIndex].logs.append(entry)
+        var logs = serviceLogs[serviceId, default: []]
+        logs.append(entry)
 
         // Enforce ring buffer limit (500 entries max per service)
-        if environments[envIndex].services[serviceIndex].logs.count > 500 {
-            environments[envIndex].services[serviceIndex].logs.removeFirst()
+        if logs.count > 500 {
+            logs.removeFirst()
         }
+
+        serviceLogs[serviceId] = logs
     }
 
     func clearLogs(for serviceId: UUID) {
-        guard let (envIndex, serviceIndex) = findServiceIndices(serviceId: serviceId) else { return }
-        environments[envIndex].services[serviceIndex].logs.removeAll()
+        serviceLogs[serviceId] = []
+    }
+
+    /// Get logs for a service
+    func logs(for serviceId: UUID) -> [LogEntry] {
+        serviceLogs[serviceId] ?? []
     }
 
     // MARK: - Process Exit Handling
@@ -660,12 +688,23 @@ final class AppState: ObservableObject {
             return
         }
 
-        // Deactivate all environments
+        // Prevent in-flight activation tasks from completing
+        isShuttingDown = true
+
+        // Force-stop all environments, including transitioning ones
         for env in activeEnvs {
-            if env.isEnabled && !env.isTransitioning {
-                deactivateEnvironment(env.id)
+            if env.isTransitioning {
+                // Clear transitioning flag so deactivation can proceed
+                if let idx = environments.firstIndex(where: { $0.id == env.id }) {
+                    environments[idx].isTransitioning = false
+                    environments[idx].isEnabled = true  // Ensure deactivation path runs
+                }
             }
+            deactivateEnvironment(env.id)
         }
+
+        // Also force-kill any remaining processes as a safety net
+        processManager?.stopAllProcesses { }
 
         // Poll for completion with timeout
         var pollCount = 0
@@ -692,9 +731,12 @@ final class AppState: ObservableObject {
     // MARK: - Helper Methods
 
     func suggestNextIP() -> String {
-        let usedIPs = Set(environments.flatMap { $0.interfaceIPs })
+        nextAvailableIP(excluding: Set(environments.flatMap { $0.interfaceIPs }))
+    }
 
-        // Try 127.0.0.x range first
+    /// Find the next available loopback IP not in the exclusion set
+    private func nextAvailableIP(excluding usedIPs: Set<String>) -> String {
+        // Try 127.0.0.x range first (skip .1 - system default)
         for i in 2...254 {
             let candidate = "127.0.0.\(i)"
             if !usedIPs.contains(candidate) {
@@ -771,7 +813,7 @@ final class AppState: ObservableObject {
 
         // Validate IP addresses
         for interface in imported.interfaces {
-            if !isValidIPAddress(interface.ip) {
+            if !isValidLoopbackIP(interface.ip) {
                 return .failure(.invalidIPFormat(interface.ip))
             }
         }
@@ -861,45 +903,19 @@ final class AppState: ObservableObject {
         var suggestedInterfaces: [Interface] = []
 
         for interface in interfaces {
-            let nextIP = findNextAvailableIP(excluding: usedIPs)
-            suggestedInterfaces.append(Interface(ip: nextIP, domain: interface.domain))
-            usedIPs.insert(nextIP)
+            let ip = nextAvailableIP(excluding: usedIPs)
+            suggestedInterfaces.append(Interface(ip: ip, domain: interface.domain))
+            usedIPs.insert(ip)
         }
 
         return suggestedInterfaces
     }
 
-    private func findNextAvailableIP(excluding usedIPs: Set<String>) -> String {
-        // Try 127.0.0.x range first
-        for i in 2...254 {
-            let candidate = "127.0.0.\(i)"
-            if !usedIPs.contains(candidate) {
-                return candidate
-            }
+    private func isValidLoopbackIP(_ ip: String) -> Bool {
+        if case .success = validationService.validateIP(ip) {
+            return true
         }
-
-        // Fallback to 127.0.1.x range
-        for i in 1...254 {
-            let candidate = "127.0.1.\(i)"
-            if !usedIPs.contains(candidate) {
-                return candidate
-            }
-        }
-
-        return "127.0.0.2"
-    }
-
-    private func isValidIPAddress(_ ip: String) -> Bool {
-        let parts = ip.split(separator: ".")
-        guard parts.count == 4 else { return false }
-
-        for part in parts {
-            guard let num = Int(part), num >= 0, num <= 255 else {
-                return false
-            }
-        }
-
-        return true
+        return false
     }
 
     // MARK: - Bulk Export/Import
@@ -962,7 +978,7 @@ final class AppState: ObservableObject {
 
             return archive.data
         } catch {
-            print("Failed to create bulk export archive: \(error)")
+            logger.error("Failed to create bulk export archive: \(error.localizedDescription)")
             return nil
         }
     }
@@ -1048,7 +1064,7 @@ final class AppState: ObservableObject {
 
                 for interface in preview.originalInterfaces {
                     if tempUsedIPs.contains(interface.ip) {
-                        let nextIP = findNextAvailableIPExcluding(tempUsedIPs)
+                        let nextIP = nextAvailableIP(excluding:tempUsedIPs)
                         suggestedInterfaces.append(Interface(ip: nextIP, domain: interface.domain))
                         tempUsedIPs.insert(nextIP)
                     } else {
@@ -1106,26 +1122,6 @@ final class AppState: ObservableObject {
         ))
     }
 
-    /// Helper to find next available IP excluding a set
-    private func findNextAvailableIPExcluding(_ usedIPs: Set<String>) -> String {
-        // Try 127.0.0.x range first
-        for i in 2...254 {
-            let candidate = "127.0.0.\(i)"
-            if !usedIPs.contains(candidate) {
-                return candidate
-            }
-        }
-
-        // Fallback to 127.0.1.x range
-        for i in 1...254 {
-            let candidate = "127.0.1.\(i)"
-            if !usedIPs.contains(candidate) {
-                return candidate
-            }
-        }
-
-        return "127.0.0.2"
-    }
 
     /// Import multiple environments from bulk import preview
     /// - Parameters:
@@ -1152,7 +1148,7 @@ final class AppState: ObservableObject {
             var finalInterfaces: [Interface] = []
             for interface in interfaces {
                 if usedIPs.contains(interface.ip) {
-                    let nextIP = findNextAvailableIPExcluding(usedIPs)
+                    let nextIP = nextAvailableIP(excluding:usedIPs)
                     finalInterfaces.append(Interface(ip: nextIP, domain: interface.domain))
                     usedIPs.insert(nextIP)
                 } else {

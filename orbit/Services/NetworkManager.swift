@@ -144,4 +144,51 @@ final class NetworkManager {
 
         return false
     }
+
+    /// Get all active loopback aliases currently configured on lo0
+    nonisolated func activeLoopbackAliases() -> [String] {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/sbin/ifconfig")
+        process.arguments = ["lo0"]
+
+        let pipe = Pipe()
+        process.standardOutput = pipe
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            guard let output = String(data: data, encoding: .utf8) else { return [] }
+
+            // Parse "inet 127.x.x.x" lines (skip 127.0.0.1 which is the default)
+            let pattern = #"inet (127\.\d+\.\d+\.\d+)"#
+            let regex = try NSRegularExpression(pattern: pattern)
+            let matches = regex.matches(in: output, range: NSRange(output.startIndex..., in: output))
+
+            return matches.compactMap { match in
+                guard let range = Range(match.range(at: 1), in: output) else { return nil }
+                let ip = String(output[range])
+                return ip == "127.0.0.1" ? nil : ip
+            }
+        } catch {
+            return []
+        }
+    }
+
+    /// Remove orphaned loopback aliases that belong to Orbit environments but
+    /// shouldn't be active (environment exists but isn't enabled).
+    /// Only touches IPs that Orbit owns — leaves unknown aliases untouched.
+    /// - Parameter ownedIPs: IPs from saved Orbit environments
+    func cleanupOrphanedAliases(ownedIPs: Set<String>) async {
+        let activeAliases = Set(activeLoopbackAliases())
+
+        // Only remove aliases that Orbit owns (in our saved config) but shouldn't be active
+        // (since all environments start as isEnabled=false on launch)
+        let orphanedAliases = activeAliases.intersection(ownedIPs)
+
+        for ip in orphanedAliases {
+            try? await bringDownInterface(ip)
+        }
+    }
 }

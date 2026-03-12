@@ -13,7 +13,16 @@ enum VariableResolver {
         // Replace variables in reverse order to handle $IP10 before $IP1
         for (index, interface) in interfaces.enumerated().reversed() {
             let variable = index == 0 ? "$IP" : "$IP\(index + 1)"
-            result = result.replacingOccurrences(of: variable, with: interface.ip)
+            // Use regex to avoid partial matches (e.g., $IP matching inside $IP3)
+            // $IP must not be followed by a digit to match
+            let pattern = NSRegularExpression.escapedPattern(for: variable) + "(?!\\d)"
+            if let regex = try? NSRegularExpression(pattern: pattern) {
+                result = regex.stringByReplacingMatches(
+                    in: result,
+                    range: NSRange(result.startIndex..., in: result),
+                    withTemplate: NSRegularExpression.escapedTemplate(for: interface.ip)
+                )
+            }
         }
 
         return result
