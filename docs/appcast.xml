@@ -8,6 +8,19 @@
 
         <!-- Latest version first (sparkle:version = build number, sparkle:shortVersionString = marketing version) -->
         <item>
+            <title>Version 0.5.9</title>
+            <sparkle:version>14</sparkle:version>
+            <sparkle:shortVersionString>0.5.9</sparkle:shortVersionString>
+            <sparkle:releaseNotesLink>https://simonren.github.io/orbit/release-notes/0.5.9.html</sparkle:releaseNotesLink>
+            <pubDate>Thu, 12 Mar 2026 12:10:50 +0800</pubDate>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <enclosure
+                url="https://github.com/simonren/orbit/releases/download/v0.5.9/Orbit-v0.5.9.dmg"
+                sparkle:edSignature="Q8vAfgnonfmFA/x+OBhEXgdhuLeK8GGyz367ixDgqxPPZUa04KubAoJaCjDtzqC7OCF+YzeyErnTqt/cALTGCA=="
+                length="5386607"
+                type="application/octet-stream" />
+        </item>
+        <item>
             <title>Version 0.5.8</title>
             <sparkle:version>13</sparkle:version>
             <sparkle:shortVersionString>0.5.8</sparkle:shortVersionString>
