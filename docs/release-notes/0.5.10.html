@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            padding: 20px;
+            max-width: 600px;
+            line-height: 1.5;
+            background: #ffffff;
+            color: #333;
+        }
+        h2 { color: #1a1a1a; border-bottom: 1px solid #ddd; padding-bottom: 8px; }
+        ul { padding-left: 20px; }
+        li { margin: 8px 0; }
+        @media (prefers-color-scheme: dark) {
+            body { background: #2d2d2d; color: #e0e0e0; }
+            h2 { color: #ffffff; border-bottom-color: #555; }
+        }
+    </style>
+</head>
+<body>
+    <h2>What's New in Orbit 0.5.10</h2>
+    <ul>
+        <li><strong>Import from Kubernetes</strong> — Import services directly from a live K8s cluster. Select a context, namespace, and one or more services to auto-generate port-forward commands with the correct name, ports, and namespace.</li>
+        <li>Support for kubectl and orb-kubectl tool selection when importing</li>
+        <li>Searchable namespace and service lists with multi-select</li>
+        <li>Added namespace parameter to kubectl example commands</li>
+    </ul>
+</body>
+</html>
