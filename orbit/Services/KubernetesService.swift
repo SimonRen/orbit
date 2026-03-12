@@ -42,8 +42,9 @@ final class KubernetesService {
                 var environment = ProcessInfo.processInfo.environment
                 let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
                 let orbitBinPath = appSupport.appendingPathComponent("Orbit/bin").path
-                let existingPath = environment["PATH"] ?? "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-                environment["PATH"] = "\(orbitBinPath):\(existingPath)"
+                let commonPaths = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+                let existingPath = environment["PATH"] ?? ""
+                environment["PATH"] = "\(orbitBinPath):\(commonPaths):\(existingPath)"
                 process.environment = environment
 
                 let stdout = Pipe()
