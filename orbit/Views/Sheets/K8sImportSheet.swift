@@ -18,7 +18,7 @@ struct K8sImportSheet: View {
     @State private var services: [K8sService] = []
     @State private var selectedServiceIds: Set<String> = []
     @State private var allSelectedServices: [String: K8sService] = [:]  // accumulated across namespaces
-    @State private var selectedTool: String = "kubectl"
+    @State private var selectedTool: String = ToolManager.shared.orbKubectlStatus != .notInstalled ? "orb-kubectl" : "kubectl"
 
     @State private var namespaceSearch: String = ""
     @State private var serviceSearch: String = ""
