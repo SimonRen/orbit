@@ -294,20 +294,24 @@ final class AppState: ObservableObject {
         var sorted = sortedEnvironments
         sorted.move(fromOffsets: source, toOffset: destination)
 
-        // Update order values
+        // Batch update — single @Published notification
+        var updated = environments
         for (index, env) in sorted.enumerated() {
-            if let envIndex = environments.firstIndex(where: { $0.id == env.id }) {
-                environments[envIndex].order = index
+            if let idx = updated.firstIndex(where: { $0.id == env.id }) {
+                updated[idx].order = index
             }
         }
+        environments = updated
     }
 
     private func reorderEnvironments() {
+        var updated = environments
         for (index, env) in sortedEnvironments.enumerated() {
-            if let envIndex = environments.firstIndex(where: { $0.id == env.id }) {
-                environments[envIndex].order = index
+            if let idx = updated.firstIndex(where: { $0.id == env.id }) {
+                updated[idx].order = index
             }
         }
+        environments = updated
     }
 
     // MARK: - Service CRUD

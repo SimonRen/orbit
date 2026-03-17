@@ -7,6 +7,7 @@ struct SidebarView: View {
     @State private var environmentToDelete: DevEnvironment?
     @State private var showingDeleteConfirmation = false
     @State private var showingCannotDeleteAlert = false
+    @State private var draggedEnvironmentId: UUID?
 
     // Import/Export state
     @State private var importPreview: ImportPreview?
@@ -85,6 +86,24 @@ struct SidebarView: View {
                         .onTapGesture {
                             appState.selectedEnvironmentId = environment.id
                         }
+                        .onDrag {
+                            draggedEnvironmentId = environment.id
+                            return NSItemProvider(object: environment.id.uuidString as NSString)
+                        } preview: {
+                            // Compact drag preview — just the name
+                            Text(environment.name)
+                                .font(.system(size: 12, weight: .medium))
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(.ultraThinMaterial)
+                                .cornerRadius(6)
+                        }
+                        .onDrop(of: [.text], delegate: EnvironmentDropDelegate(
+                            targetId: environment.id,
+                            draggedId: $draggedEnvironmentId,
+                            appState: appState
+                        ))
+                        .opacity(draggedEnvironmentId == environment.id ? 0.3 : 1)
                         .contextMenu {
                             Button {
                                 exportEnvironment(environment)
@@ -109,6 +128,11 @@ struct SidebarView: View {
                 }
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
+            }
+            .onDrop(of: [.text], isTargeted: nil) { _ in
+                // Catch-all: clear drag state when dropped outside any row
+                withAnimation { draggedEnvironmentId = nil }
+                return false
             }
             .alert("Delete Environment?", isPresented: $showingDeleteConfirmation) {
                 Button("Delete", role: .destructive) {
@@ -309,6 +333,47 @@ struct SidebarView: View {
                     print("Failed to export archive: \(error)")
                 }
             }
+        }
+    }
+}
+
+// MARK: - Drag & Drop Delegate
+
+struct EnvironmentDropDelegate: DropDelegate {
+    let targetId: UUID
+    @Binding var draggedId: UUID?
+    let appState: AppState
+
+    func validateDrop(info: DropInfo) -> Bool {
+        draggedId != nil
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        guard draggedId != nil else { return DropProposal(operation: .cancel) }
+        return DropProposal(operation: .move)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        guard draggedId != nil else { return false }
+        DispatchQueue.main.async {
+            withAnimation { draggedId = nil }
+        }
+        return true
+    }
+
+    func dropEntered(info: DropInfo) {
+        guard let draggedId = draggedId, draggedId != targetId else { return }
+
+        let sorted = appState.sortedEnvironments
+        guard let fromIndex = sorted.firstIndex(where: { $0.id == draggedId }),
+              let toIndex = sorted.firstIndex(where: { $0.id == targetId })
+        else { return }
+
+        withAnimation(.default) {
+            appState.moveEnvironment(
+                from: IndexSet(integer: fromIndex),
+                to: fromIndex < toIndex ? toIndex + 1 : toIndex
+            )
         }
     }
 }
