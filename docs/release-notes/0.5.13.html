@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            padding: 20px;
+            max-width: 600px;
+            line-height: 1.5;
+            background: #ffffff;
+            color: #333;
+        }
+        h2 { color: #1a1a1a; border-bottom: 1px solid #ddd; padding-bottom: 8px; }
+        ul { padding-left: 20px; }
+        li { margin: 8px 0; }
+        @media (prefers-color-scheme: dark) {
+            body { background: #2d2d2d; color: #e0e0e0; }
+            h2 { color: #ffffff; border-bottom-color: #555; }
+        }
+    </style>
+</head>
+<body>
+    <h2>What's New in Orbit 0.5.13</h2>
+    <ul>
+        <li>Fuzzy search for namespaces and services in K8s import (e.g. "abc123" matches "abc-def-123")</li>
+        <li>Fixed shell injection risk with context/service names containing spaces or special characters</li>
+        <li>Fixed thread safety issue in kubectl output handling</li>
+        <li>Fixed stale data shown when namespace/service fetch fails</li>
+        <li>Cancelled K8s fetches now properly terminate kubectl processes</li>
+        <li>Fixed orb-kubectl being selectable when not installed</li>
+    </ul>
+</body>
+</html>
