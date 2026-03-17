@@ -218,8 +218,44 @@ enum K8sError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .commandFailed(let msg): return msg
+        case .commandFailed(let msg): return K8sError.friendlyMessage(from: msg)
         case .parseError: return "Failed to parse kubectl output"
         }
+    }
+
+    /// Convert raw kubectl stderr into a short, user-friendly message
+    private static func friendlyMessage(from raw: String) -> String {
+        let lower = raw.lowercased()
+        if lower.contains("connection refused") {
+            return "Connection refused — is the cluster running?"
+        }
+        if lower.contains("unable to connect to the server") {
+            return "Unable to connect to the cluster"
+        }
+        if lower.contains("timeout") || lower.contains("timed out") {
+            return "Connection timed out — cluster may be unreachable"
+        }
+        if lower.contains("unauthorized") || lower.contains("forbidden") {
+            return "Authentication failed — check your credentials"
+        }
+        if lower.contains("certificate") {
+            return "Certificate error — check cluster credentials"
+        }
+        if lower.contains("context") && lower.contains("not found") {
+            return "Context not found in kubeconfig"
+        }
+        if lower.contains("no configuration") || lower.contains("config not found") {
+            return "No kubeconfig found — is kubectl configured?"
+        }
+        if lower.contains("command not found") || lower.contains("no such file") {
+            return "kubectl not found — is it installed?"
+        }
+        // Fallback: take the first meaningful line, truncate
+        let firstLine = raw.components(separatedBy: .newlines)
+            .first { !$0.trimmingCharacters(in: .whitespaces).isEmpty } ?? raw
+        if firstLine.count > 100 {
+            return String(firstLine.prefix(100)) + "…"
+        }
+        return firstLine
     }
 }
