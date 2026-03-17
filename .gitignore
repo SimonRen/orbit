@@ -76,3 +76,4 @@ releases/
 
 # Vendored binaries (too large for git, released separately)
 vendor/
+.superpowers/

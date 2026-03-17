@@ -34,12 +34,26 @@ struct K8sImportSheet: View {
 
     private var filteredNamespaces: [String] {
         if namespaceSearch.isEmpty { return namespaces }
-        return namespaces.filter { $0.localizedCaseInsensitiveContains(namespaceSearch) }
+        let query = namespaceSearch.lowercased()
+        return namespaces.filter { fuzzyMatch($0, query: query) }
     }
 
     private var filteredServices: [K8sService] {
         if serviceSearch.isEmpty { return services }
-        return services.filter { $0.name.localizedCaseInsensitiveContains(serviceSearch) }
+        let query = serviceSearch.lowercased()
+        return services.filter { fuzzyMatch($0.name, query: query) }
+    }
+
+    /// Fuzzy match: all query characters must appear in order, skipping separators/gaps.
+    /// e.g. "abc123" matches "abc-def-123" and "xxxabc-uuuu-123.fdaf"
+    private func fuzzyMatch(_ text: String, query: String) -> Bool {
+        let loweredText = text.lowercased()
+        var textIndex = loweredText.startIndex
+        for char in query {
+            guard let found = loweredText[textIndex...].firstIndex(of: char) else { return false }
+            textIndex = loweredText.index(after: found)
+        }
+        return true
     }
 
     private var selectedCount: Int { allSelectedServices.count }
@@ -115,7 +129,7 @@ struct K8sImportSheet: View {
                 }
                 .pickerStyle(.segmented)
                 .frame(width: 180)
-                .disabled(!orbKubectlInstalled && selectedTool != "kubectl")
+                .disabled(!orbKubectlInstalled)
                 .help(orbKubectlInstalled ? "" : "orb-kubectl is not installed")
             }
         }
@@ -391,6 +405,7 @@ struct K8sImportSheet: View {
             } catch {
                 guard !Task.isCancelled else { return }
                 await MainActor.run {
+                    namespaces = []
                     isLoadingNamespaces = false
                     errorMessage = error.localizedDescription
                     logger.error("Failed to fetch namespaces: \(error.localizedDescription)")
@@ -402,6 +417,7 @@ struct K8sImportSheet: View {
     private func loadServices() {
         guard let ns = selectedNamespace else { return }
         isLoadingServices = true
+        services = []
         serviceSearch = ""
         fetchTask?.cancel()
         fetchTask = Task {
@@ -417,6 +433,7 @@ struct K8sImportSheet: View {
             } catch {
                 guard !Task.isCancelled else { return }
                 await MainActor.run {
+                    services = []
                     isLoadingServices = false
                     errorMessage = error.localizedDescription
                     logger.error("Failed to fetch services: \(error.localizedDescription)")
