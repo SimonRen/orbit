@@ -36,11 +36,15 @@ struct ServiceCardView: View {
 
             Spacer()
 
-            // Error indicator
+            // Error/reconnecting indicator
             if service.status == .failed, let error = service.lastError {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundColor(.red)
                     .help(error)
+            } else if service.status == .reconnecting, let info = service.lastError {
+                Image(systemName: "arrow.triangle.2.circlepath")
+                    .foregroundColor(.orange)
+                    .help(info)
             }
 
             // View logs button
@@ -53,8 +57,9 @@ struct ServiceCardView: View {
             .help("View Logs")
 
             // Enable/disable toggle
-            // Allow toggling ON if service is stopped/failed, even if other checks fail
+            // Allow toggling ON if service is stopped/failed, and toggling OFF if reconnecting
             let canToggleOn = !service.isEnabled && (service.status == .stopped || service.status == .failed)
+            let canToggleOff = service.isEnabled && service.status == .reconnecting
             Toggle("", isOn: Binding(
                 get: { service.isEnabled },
                 set: { onToggle($0) }
@@ -62,7 +67,7 @@ struct ServiceCardView: View {
             .toggleStyle(.switch)
             .controlSize(.mini)
             .labelsHidden()
-            .disabled(!canToggleOn && (isToggleDisabled || isEnvironmentTransitioning || service.status.isTransitioning))
+            .disabled(!canToggleOn && !canToggleOff && (isToggleDisabled || isEnvironmentTransitioning || service.status.isTransitioning))
 
             // Context menu button
             Menu {
@@ -73,7 +78,7 @@ struct ServiceCardView: View {
                 Button(action: onEdit) {
                     Label("Edit", systemImage: "pencil")
                 }
-                .disabled(isEnvironmentTransitioning || service.status == .running || service.status.isTransitioning)
+                .disabled(isEnvironmentTransitioning || service.status == .running || service.status.isTransitioning || service.status == .reconnecting)
 
                 Divider()
 

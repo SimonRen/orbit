@@ -48,6 +48,26 @@ final class AppState: ObservableObject {
     /// Flag to prevent activation tasks from completing during shutdown
     private var isShuttingDown = false
 
+    // MARK: - Auto-Restart State
+
+    /// Pending restart tasks keyed by service ID
+    private var restartTasks: [UUID: Task<Void, Never>] = [:]
+
+    /// Services that are being intentionally stopped (prevents late exit callbacks from triggering restart)
+    private var stoppingServiceIds: Set<UUID> = []
+
+    /// Base delay for exponential backoff (seconds)
+    private let restartBaseDelay: TimeInterval = 2.0
+
+    /// Maximum backoff delay cap (seconds)
+    private let restartMaxDelay: TimeInterval = 30.0
+
+    /// How long a service must stay running before restartCount resets (seconds)
+    private let stabilityWindow: TimeInterval = 60.0
+
+    /// Pending stability reset tasks keyed by service ID
+    private var stabilityTasks: [UUID: Task<Void, Never>] = [:]
+
     // MARK: - Dependencies
 
     private let configManager = ConfigManager.shared
@@ -267,16 +287,20 @@ final class AppState: ObservableObject {
     func deleteEnvironment(_ id: UUID) {
         guard let env = environments.first(where: { $0.id == id }) else { return }
 
+        // Cancel all pending restarts for this environment
+        cancelAllRestarts(for: id)
+
         // Deactivate first if active
         if env.isEnabled {
             deactivateEnvironment(id)
         }
 
-        // Clean up cooldown tracking and cache for this environment and its services
+        // Clean up cooldown tracking, cache, and restart state for this environment and its services
         lastEnvironmentToggleTime.removeValue(forKey: id)
         for service in env.services {
             lastServiceToggleTime.removeValue(forKey: service.id)
             serviceToEnvironmentCache.removeValue(forKey: service.id)
+            stoppingServiceIds.remove(service.id)
         }
 
         environments.removeAll { $0.id == id }
@@ -346,15 +370,17 @@ final class AppState: ObservableObject {
 
         let service = environments[envIndex].services[serviceIndex]
 
-        // Stop if running
-        if service.status == .running || service.status == .starting {
+        // Cancel any pending restart and stop if active
+        cancelRestart(for: serviceId)
+        if service.status == .running || service.status == .starting || service.status == .reconnecting {
             processManager?.stopProcess(for: serviceId) { }
         }
 
-        // Clean up cooldown tracking, cache, and logs
+        // Clean up cooldown tracking, cache, logs, and stop intent
         lastServiceToggleTime.removeValue(forKey: serviceId)
         serviceToEnvironmentCache.removeValue(forKey: serviceId)
         serviceLogs.removeValue(forKey: serviceId)
+        stoppingServiceIds.remove(serviceId)
 
         environments[envIndex].services.remove(at: serviceIndex)
 
@@ -377,7 +403,7 @@ final class AppState: ObservableObject {
             return
         }
 
-        // Prevent toggle if service is transitioning
+        // Prevent toggle if service is transitioning (but allow .reconnecting to be stopped)
         if service.status.isTransitioning {
             return
         }
@@ -398,9 +424,19 @@ final class AppState: ObservableObject {
         // If environment is active, start/stop the service
         if env.isEnabled {
             if updatedService.isEnabled {
+                environments[envIndex].services[serviceIndex].restartCount = 0
                 startService(serviceId: serviceId, in: envIndex)
             } else {
-                stopService(serviceId: serviceId, in: envIndex)
+                // Cancel any pending restart before stopping
+                cancelRestart(for: serviceId)
+                if service.status == .reconnecting {
+                    // Not actually running — just cancel the timer and mark stopped
+                    stoppingServiceIds.remove(serviceId)
+                    environments[envIndex].services[serviceIndex].status = .stopped
+                    environments[envIndex].services[serviceIndex].restartCount = 0
+                } else {
+                    stopService(serviceId: serviceId, in: envIndex)
+                }
             }
         }
     }
@@ -416,7 +452,7 @@ final class AppState: ObservableObject {
             return false
         }
 
-        // Can't toggle if service is transitioning
+        // Can't toggle if service is transitioning (but .reconnecting is user-stoppable)
         if service.status.isTransitioning {
             return false
         }
@@ -490,6 +526,9 @@ final class AppState: ObservableObject {
 
         let env = environments[index]
 
+        // Cancel all pending restarts for this environment immediately
+        cancelAllRestarts(for: id)
+
         // Mark as transitioning
         environments[index].isTransitioning = true
 
@@ -499,6 +538,8 @@ final class AppState: ObservableObject {
         for serviceIndex in environments[index].services.indices {
             let service = environments[index].services[serviceIndex]
             if service.status.isActive {
+                // Track stop intent so late exit callbacks don't trigger restart
+                stoppingServiceIds.insert(service.id)
                 environments[index].services[serviceIndex].status = .stopping
 
                 group.enter()
@@ -509,6 +550,7 @@ final class AppState: ObservableObject {
                            let svcIdx = self.environments[envIdx].services.firstIndex(where: { $0.id == service.id }) {
                             self.environments[envIdx].services[svcIdx].status = .stopped
                             self.environments[envIdx].services[svcIdx].restartCount = 0
+                            self.stoppingServiceIds.remove(service.id)
                         }
                         group.leave()
                     }
@@ -624,6 +666,9 @@ final class AppState: ObservableObject {
                    self.environments[envIdx].services[svcIdx].status == .starting,
                    processManager.isRunning(serviceId: serviceId) {
                     self.environments[envIdx].services[svcIdx].status = .running
+
+                    // Schedule stability window: reset restartCount only after running stably for 60s
+                    self.scheduleStabilityReset(serviceId: serviceId)
                 }
             }
         } else {
@@ -638,12 +683,18 @@ final class AppState: ObservableObject {
               let processManager = processManager
         else { return }
 
+        // Mark explicit stop intent and cancel any pending restart
+        stoppingServiceIds.insert(serviceId)
+        cancelRestart(for: serviceId)
+
         let environmentId = environments[environmentIndex].id  // Capture ID, not index
         environments[environmentIndex].services[serviceIndex].status = .stopping
 
         processManager.stopProcess(for: serviceId) { [weak self] in
             Task { @MainActor in
                 guard let self = self else { return }
+
+                self.stoppingServiceIds.remove(serviceId)
 
                 // Look up by IDs, not captured indices
                 if let envIdx = self.environments.firstIndex(where: { $0.id == environmentId }),
@@ -680,16 +731,130 @@ final class AppState: ObservableObject {
     // MARK: - Process Exit Handling
 
     private func handleProcessExit(serviceId: UUID, exitCode: Int32) {
+        // Cancel any pending stability reset for this service
+        stabilityTasks[serviceId]?.cancel()
+        stabilityTasks.removeValue(forKey: serviceId)
+
         guard let (envIndex, serviceIndex) = findServiceIndices(serviceId: serviceId) else { return }
 
-        let wasExpected = environments[envIndex].services[serviceIndex].status == .stopping
+        // Use explicit stop-intent tracking instead of status check to avoid races
+        let wasExpected = stoppingServiceIds.remove(serviceId) != nil
 
         if wasExpected {
             environments[envIndex].services[serviceIndex].status = .stopped
-        } else {
+            return
+        }
+
+        let service = environments[envIndex].services[serviceIndex]
+        let env = environments[envIndex]
+
+        // Only auto-restart if: environment is active, service is enabled, not shutting down
+        guard !isShuttingDown,
+              env.isEnabled,
+              !env.isTransitioning,
+              service.isEnabled
+        else {
             environments[envIndex].services[serviceIndex].status = .failed
             environments[envIndex].services[serviceIndex].lastError = "Process exited with code \(exitCode)"
+            return
         }
+
+        // Increment restart count and schedule reconnect
+        environments[envIndex].services[serviceIndex].restartCount += 1
+        let attempt = environments[envIndex].services[serviceIndex].restartCount
+
+        let delay = min(restartBaseDelay * pow(2.0, Double(attempt - 1)), restartMaxDelay)
+        environments[envIndex].services[serviceIndex].status = .reconnecting
+        environments[envIndex].services[serviceIndex].lastError = "Connection lost. Reconnecting in \(Int(delay))s... (attempt \(attempt))"
+
+        let environmentId = env.id
+        scheduleRestart(serviceId: serviceId, environmentId: environmentId, delay: delay, attempt: attempt)
+    }
+
+    /// Schedule an auto-restart with exponential backoff
+    private func scheduleRestart(serviceId: UUID, environmentId: UUID, delay: TimeInterval, attempt: Int) {
+        // Cancel any existing restart task for this service
+        restartTasks[serviceId]?.cancel()
+
+        let task = Task { [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            } catch {
+                // Task was cancelled — do not restart
+                return
+            }
+
+            guard let self = self else { return }
+
+            // Clean up our entry from the dictionary
+            self.restartTasks.removeValue(forKey: serviceId)
+
+            // Re-validate all preconditions before spawning
+            guard !self.isShuttingDown,
+                  !Task.isCancelled,
+                  let envIdx = self.environments.firstIndex(where: { $0.id == environmentId }),
+                  self.environments[envIdx].isEnabled,
+                  !self.environments[envIdx].isTransitioning,
+                  let svcIdx = self.environments[envIdx].services.firstIndex(where: { $0.id == serviceId }),
+                  self.environments[envIdx].services[svcIdx].isEnabled,
+                  self.environments[envIdx].services[svcIdx].status == .reconnecting
+            else { return }
+
+            logger.info("Auto-restarting service (attempt \(attempt))")
+
+            // Log the reconnect attempt
+            let logEntry = LogEntry(
+                message: "Reconnecting (attempt \(attempt))...",
+                stream: .stdout
+            )
+            self.appendLog(serviceId: serviceId, entry: logEntry)
+
+            // Restart the service
+            self.startService(serviceId: serviceId, in: envIdx)
+        }
+
+        restartTasks[serviceId] = task
+    }
+
+    /// Cancel any pending auto-restart for a service
+    private func cancelRestart(for serviceId: UUID) {
+        restartTasks[serviceId]?.cancel()
+        restartTasks.removeValue(forKey: serviceId)
+        stabilityTasks[serviceId]?.cancel()
+        stabilityTasks.removeValue(forKey: serviceId)
+    }
+
+    /// Cancel all pending auto-restarts for all services in an environment
+    private func cancelAllRestarts(for environmentId: UUID) {
+        guard let env = environments.first(where: { $0.id == environmentId }) else { return }
+        for service in env.services {
+            cancelRestart(for: service.id)
+        }
+    }
+
+    /// Schedule a stability reset: if the service stays running for 60s, reset restartCount to 0
+    private func scheduleStabilityReset(serviceId: UUID) {
+        stabilityTasks[serviceId]?.cancel()
+
+        let window = stabilityWindow
+        let task = Task { [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: UInt64(window * 1_000_000_000))
+            } catch {
+                return // Cancelled
+            }
+
+            guard let self = self else { return }
+            self.stabilityTasks.removeValue(forKey: serviceId)
+
+            if let (envIdx, svcIdx) = self.findServiceIndices(serviceId: serviceId),
+               self.environments[envIdx].services[svcIdx].status == .running {
+                self.environments[envIdx].services[svcIdx].restartCount = 0
+                logger.info("Service stable for \(Int(window))s — restart count reset")
+            }
+        }
+
+        stabilityTasks[serviceId] = task
     }
 
     // MARK: - App Lifecycle
@@ -702,8 +867,13 @@ final class AppState: ObservableObject {
             return
         }
 
-        // Prevent in-flight activation tasks from completing
+        // Prevent in-flight activation tasks and auto-restarts from completing
         isShuttingDown = true
+
+        // Cancel all pending restarts across all environments
+        for env in environments {
+            cancelAllRestarts(for: env.id)
+        }
 
         // Force-stop all environments, including transitioning ones
         for env in activeEnvs {
