@@ -56,11 +56,8 @@ final class AppState: ObservableObject {
     /// Services that are being intentionally stopped (prevents late exit callbacks from triggering restart)
     private var stoppingServiceIds: Set<UUID> = []
 
-    /// Base delay for exponential backoff (seconds)
-    private let restartBaseDelay: TimeInterval = 2.0
-
-    /// Maximum backoff delay cap (seconds)
-    private let restartMaxDelay: TimeInterval = 30.0
+    /// Progressive backoff schedule (seconds): 1, 2, 5, 10, 15, 30, 60, 120, 180 then stays at 180
+    private let restartDelays: [TimeInterval] = [1, 2, 5, 10, 15, 30, 60, 120, 180]
 
     /// How long a service must stay running before restartCount resets (seconds)
     private let stabilityWindow: TimeInterval = 60.0
@@ -763,7 +760,8 @@ final class AppState: ObservableObject {
         environments[envIndex].services[serviceIndex].restartCount += 1
         let attempt = environments[envIndex].services[serviceIndex].restartCount
 
-        let delay = min(restartBaseDelay * pow(2.0, Double(attempt - 1)), restartMaxDelay)
+        let delayIndex = min(attempt - 1, restartDelays.count - 1)
+        let delay = restartDelays[delayIndex]
         environments[envIndex].services[serviceIndex].status = .reconnecting
         environments[envIndex].services[serviceIndex].lastError = "Connection lost. Reconnecting in \(Int(delay))s... (attempt \(attempt))"
 
