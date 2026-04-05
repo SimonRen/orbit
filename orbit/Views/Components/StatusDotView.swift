@@ -14,11 +14,13 @@ struct StatusDotView: View {
             return .green
         case .failed:
             return .red
+        case .reconnecting:
+            return .orange
         }
     }
 
     private var shouldPulse: Bool {
-        status.isTransitioning
+        status.isTransitioning || status == .reconnecting
     }
 
     var body: some View {
@@ -76,6 +78,10 @@ struct PulseAnimationModifier: ViewModifier {
         VStack {
             StatusDotView(status: .stopping)
             Text("Stopping").font(.caption)
+        }
+        VStack {
+            StatusDotView(status: .reconnecting)
+            Text("Reconnecting").font(.caption)
         }
     }
     .padding()

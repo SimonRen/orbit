@@ -125,6 +125,7 @@ struct DevEnvironment: Identifiable, Codable, Equatable {
 
         if statuses.isEmpty { return .stopped }
         if statuses.contains(.failed) { return .failed }
+        if statuses.contains(.reconnecting) { return .reconnecting }
         if statuses.contains(.starting) { return .starting }
         if statuses.contains(.stopping) { return .stopping }
         if statuses.allSatisfy({ $0 == .running }) { return .running }
