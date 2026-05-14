@@ -18,7 +18,11 @@ struct K8sImportSheet: View {
     @State private var services: [K8sService] = []
     @State private var selectedServiceIds: Set<String> = []
     @State private var allSelectedServices: [String: K8sService] = [:]  // accumulated across namespaces
-    @State private var selectedTool: String = ToolManager.shared.orbKubectlStatus != .notInstalled ? "orb-kubectl" : "kubectl"
+    // Default to plain kubectl. We only promote to orb-kubectl in .onAppear
+    // once we've confirmed it's actually installed — avoids defaulting to
+    // orb-kubectl during the transient .checking state, which left users
+    // with the picker disabled AND orb-kubectl selected (so no way to switch).
+    @State private var selectedTool: String = "kubectl"
 
     @State private var namespaceSearch: String = ""
     @State private var serviceSearch: String = ""
@@ -74,7 +78,15 @@ struct K8sImportSheet: View {
             footerView
         }
         .frame(width: 700, height: 550)
-        .onAppear { loadContexts() }
+        .onAppear {
+            // Promote default to orb-kubectl if it's actually installed.
+            // Done in onAppear (not as @State default) so the transient .checking
+            // state doesn't pre-select an unavailable tool.
+            if orbKubectlInstalled {
+                selectedTool = "orb-kubectl"
+            }
+            loadContexts()
+        }
         .onDisappear { fetchTask?.cancel() }
     }
 
@@ -118,19 +130,30 @@ struct K8sImportSheet: View {
 
             Spacer()
 
-            // Tool toggle
+            // Tool toggle. We only show the segmented picker when orb-kubectl
+            // is installed; otherwise we show kubectl as a plain label so the
+            // user can't accidentally select an unavailable binary.
             VStack(alignment: .leading, spacing: 4) {
                 Text("TOOL")
                     .font(.callout)
                     .foregroundColor(.secondary)
-                Picker("", selection: $selectedTool) {
-                    Text("kubectl").tag("kubectl")
-                    Text("orb-kubectl").tag("orb-kubectl")
+                if orbKubectlInstalled {
+                    Picker("", selection: $selectedTool) {
+                        Text("kubectl").tag("kubectl")
+                        Text("orb-kubectl").tag("orb-kubectl")
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 180)
+                } else {
+                    HStack(spacing: 6) {
+                        Text("kubectl")
+                            .font(.body.weight(.medium))
+                        Text("(orb-kubectl not installed)")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(height: 22)
                 }
-                .pickerStyle(.segmented)
-                .frame(width: 180)
-                .disabled(!orbKubectlInstalled)
-                .help(orbKubectlInstalled ? "" : "orb-kubectl is not installed")
             }
         }
         .padding(.horizontal, 20)

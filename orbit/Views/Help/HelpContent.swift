@@ -279,15 +279,28 @@ extension HelpContent {
     static let orbKubectlArticle = HelpArticle(
         id: "orb-kubectl",
         title: "orb-kubectl (kubectl with retry)",
-        summary: "Install a kubectl variant that auto-reconnects on transient port-forward failures.",
+        summary: "An optional kubectl variant that auto-reconnects on transient port-forward failures. What it is, where it comes from, and whether you need it.",
         body: [
-            .paragraph("orb-kubectl is a Go-built kubectl binary with a --retry flag for port-forward. It transparently re-establishes the connection when the underlying API server hiccups, which avoids the common \"the connection was closed unexpectedly\" situation."),
+            .paragraph("orb-kubectl is a custom build of kubectl with a --retry flag for port-forward. It transparently re-establishes the connection when the underlying API server hiccups, avoiding the common \"the connection was closed unexpectedly\" situation."),
+            .heading("Do you need it?"),
+            .paragraph("No. Orbit's Kubernetes import works with plain kubectl from your $PATH. orb-kubectl is a convenience for users whose clusters have flaky API-server connections. If you're not sure, stick with kubectl."),
+            .heading("Where the binary comes from (trust model)"),
+            .paragraph("orb-kubectl is shipped by the Orbit project as a GitHub Release asset. When you choose to install it, Orbit downloads the archive, verifies its SHA-256 against the value embedded in this build of Orbit, and only then writes the binary to disk. A checksum mismatch aborts the install — your existing setup is not modified."),
+            .bullets([
+                "Source: github.com/simonren/orbit/releases (orb-kubectl-vX.Y.Z asset)",
+                "Verification: SHA-256 of the archive, compared against a value pinned in Orbit's source code",
+                "Installation path: ~/Library/Application Support/Orbit/bin/orb-kubectl",
+                "Privileges: runs as your user; no admin password required to install",
+            ]),
+            .note(severity: .warn, "Like any third-party kubectl, orb-kubectl can read your kubeconfig and talk to your clusters with your credentials. If you'd rather not trust a non-official kubectl build, decline the install — plain kubectl works fine."),
             .heading("Install"),
-            .paragraph("Open Orbit → Install orb-kubectl... from the app menu, or use the Network section of Settings. The binary downloads to ~/Library/Application Support/Orbit/bin/ and is automatically on PATH for any service Orbit spawns."),
+            .paragraph("Orbit menu → Install orb-kubectl... — or open Settings → Network. You'll get a confirmation dialog showing the version, source URL, and expected checksum before any download starts. Click Cancel to back out."),
             .heading("Use it"),
             .codeBlock("orb-kubectl port-forward --address $IP svc/api 8080:8080 --retry"),
-            .paragraph("That's it — same flags as kubectl, plus --retry. When a new orb-kubectl is shipped with Orbit, the menu changes to \"Update orb-kubectl...\"."),
-            .note(severity: .tip, "orb-kubectl uses your existing kubeconfig (~/.kube/config), contexts, and credentials — nothing changes about cluster auth."),
+            .paragraph("Same flags as kubectl, plus --retry. The binary is added to the PATH for every service Orbit spawns, so you can just type orb-kubectl in your service command. When a new orb-kubectl is shipped with Orbit, the menu changes to \"Update orb-kubectl...\" — the same trust confirmation runs again."),
+            .heading("Uninstall"),
+            .paragraph("Delete the binary at ~/Library/Application Support/Orbit/bin/orb-kubectl. Orbit's K8s import sheet automatically falls back to kubectl when orb-kubectl isn't installed."),
+            .note(severity: .tip, "orb-kubectl uses your existing kubeconfig (~/.kube/config), contexts, and credentials — nothing changes about cluster auth itself."),
         ]
     )
 

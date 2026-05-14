@@ -16,7 +16,6 @@ struct OrbitApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var appState = AppState()
     @StateObject private var updaterManager = UpdaterManager.shared
-    @StateObject private var toolManager = ToolManager.shared
     @Environment(\.openWindow) private var openWindow
 
     private let processManager = ProcessManager.shared
@@ -60,13 +59,12 @@ struct OrbitApp: App {
         .windowStyle(.titleBar)
         .defaultSize(width: 700, height: 500)
         .commands {
-            // Check for Updates in app menu (after About)
+            // Check for Updates in app menu (after About).
+            // orb-kubectl management lives in Settings → Tools, not here,
+            // to mirror the helper management pattern (Settings-only) and
+            // avoid two entry points for the same action.
             CommandGroup(after: .appInfo) {
                 CheckForUpdatesView(updaterManager: updaterManager)
-
-                Divider()
-
-                OrbKubectlMenuView(toolManager: toolManager)
             }
 
             // File menu customization

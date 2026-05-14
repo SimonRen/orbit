@@ -15,10 +15,15 @@ struct SettingsView: View {
     @AppStorage("launchAtLogin") private var launchAtLogin: Bool = false
     @AppStorage("autoManageInterfaces") private var autoManageInterfaces: Bool = true
 
+    @ObservedObject private var toolManager = ToolManager.shared
+
     @State private var loginItemError: String?
     @State private var helperBusy = false
     @State private var helperError: String?
     @State private var showRequiresApprovalAlert = false
+    @State private var showingOrbKubectlInstall = false
+    @State private var showingOrbKubectlUninstall = false
+    @State private var orbKubectlError: String?
 
     var body: some View {
         Form {
@@ -76,9 +81,30 @@ struct SettingsView: View {
                     }
                 }
             }
+
+            Section("Tools") {
+                HStack(alignment: .firstTextBaseline) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(orbKubectlStatusLabel)
+                            .font(.callout)
+                        Text("kubectl with --retry for port-forwarding. Optional — Orbit's K8s import works with plain kubectl too.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        if let err = orbKubectlError {
+                            Text(err)
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    Spacer()
+                    orbKubectlActionButton
+                }
+            }
         }
         .formStyle(.grouped)
-        .frame(width: 480, height: 360)
+        .frame(width: 520, height: 460)
         .onAppear {
             // Sync the toggle with the actual system state in case the user changed
             // it in System Settings since the last app launch.
@@ -96,6 +122,66 @@ struct SettingsView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Open System Settings → General → Login Items and allow Orbit to run at login.")
+        }
+        .alert(isOrbKubectlInstallMode ? "Install orb-kubectl?" : "Update orb-kubectl?",
+               isPresented: $showingOrbKubectlInstall) {
+            Button(isOrbKubectlInstallMode ? "Download & Install" : "Download & Update") {
+                orbKubectlError = nil
+                Task { await toolManager.installOrUpdate() }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(ToolManager.orbKubectlTrustDisclosure)
+        }
+        .alert("Uninstall orb-kubectl?", isPresented: $showingOrbKubectlUninstall) {
+            Button("Uninstall", role: .destructive) {
+                do {
+                    try toolManager.uninstall()
+                    orbKubectlError = nil
+                } catch {
+                    orbKubectlError = error.localizedDescription
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Removes the binary from ~/Library/Application Support/Orbit/bin/. Plain kubectl from your $PATH will still work in the Kubernetes import sheet. You can reinstall any time.")
+        }
+    }
+
+    // MARK: - orb-kubectl helpers
+
+    private var orbKubectlStatusLabel: String {
+        switch toolManager.orbKubectlStatus {
+        case .checking:                       return "orb-kubectl — checking…"
+        case .notInstalled:                   return "orb-kubectl — not installed"
+        case .installed(let v):               return "orb-kubectl installed (v\(v))"
+        case .updateAvailable(let i, let a):  return "orb-kubectl v\(i) installed (v\(a) available)"
+        }
+    }
+
+    private var isOrbKubectlInstallMode: Bool {
+        if case .notInstalled = toolManager.orbKubectlStatus { return true }
+        return false
+    }
+
+    @ViewBuilder
+    private var orbKubectlActionButton: some View {
+        if toolManager.isDownloading {
+            ProgressView(value: toolManager.downloadProgress).controlSize(.small).frame(width: 80)
+        } else {
+            switch toolManager.orbKubectlStatus {
+            case .checking:
+                ProgressView().controlSize(.small)
+            case .notInstalled:
+                Button("Install…") { showingOrbKubectlInstall = true }
+            case .installed:
+                Button("Uninstall…") { showingOrbKubectlUninstall = true }
+            case .updateAvailable:
+                HStack(spacing: 6) {
+                    Button("Update…") { showingOrbKubectlInstall = true }
+                    Button("Uninstall…") { showingOrbKubectlUninstall = true }
+                }
+            }
         }
     }
 

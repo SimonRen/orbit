@@ -1,10 +1,13 @@
 import Foundation
+import CryptoKit
 
 /// Definition of a downloadable tool - update these when releasing new Orbit with new tool versions
 struct ToolDefinition {
     let name: String
     let version: String
     let downloadURL: URL
+    /// Lowercase hex-encoded SHA-256 of the downloaded archive. Verified
+    /// before installation — a mismatch aborts the install.
     let sha256: String
     let description: String
 }
@@ -100,6 +103,23 @@ final class ToolManager: ObservableObject {
 
             // Download zip file
             let (zipURL, _) = try await downloadWithProgress(from: Self.orbKubectlDefinition.downloadURL)
+            downloadProgress = 0.4
+
+            // Verify SHA-256 of the downloaded archive against the value embedded
+            // in this binary. A mismatch means the downloaded file isn't the one
+            // this build of Orbit expects — could be tampering, a corrupted CDN
+            // response, or a misconfigured release. Refuse to proceed.
+            let actual = try sha256Hex(of: zipURL)
+            let expected = Self.orbKubectlDefinition.sha256.lowercased()
+            guard actual == expected else {
+                throw NSError(
+                    domain: "ToolManager",
+                    code: 3,
+                    userInfo: [NSLocalizedDescriptionKey:
+                        "Checksum verification failed. Expected \(expected), got \(actual). Installation aborted; nothing changed."
+                    ]
+                )
+            }
             downloadProgress = 0.5
 
             // Unzip to temp location
@@ -196,6 +216,35 @@ final class ToolManager: ObservableObject {
         return false
     }
 
+    /// Trust disclosure shown to the user before any install / update. Explains
+    /// what orb-kubectl is, where the binary comes from, what gets verified,
+    /// and the trade-off vs plain kubectl. Surfaced by SettingsView's
+    /// orb-kubectl install/update alert.
+    static var orbKubectlTrustDisclosure: String {
+        let def = orbKubectlDefinition
+        return """
+            orb-kubectl is a custom build of kubectl with --retry support \
+            for port-forwarding, maintained alongside Orbit itself.
+
+            Version: \(def.version)
+            From: \(def.downloadURL.absoluteString)
+            SHA-256: \(def.sha256)
+
+            Orbit verifies the SHA-256 of the downloaded archive against the \
+            value embedded in this app before installing. A mismatch aborts \
+            the install — the file on disk is not replaced.
+
+            Installed to ~/Library/Application Support/Orbit/bin/, the binary \
+            will be on the PATH for any service Orbit spawns. It uses your \
+            existing kubeconfig like a normal kubectl. It runs as your user \
+            (no elevated privileges).
+
+            If you'd rather not trust a third-party kubectl, you can decline \
+            here and use plain kubectl from your $PATH — Orbit's Kubernetes \
+            import works with both.
+            """
+    }
+
     // MARK: - Private Methods
 
     private func checkIfToolIsRunning() -> Bool {
@@ -231,5 +280,13 @@ final class ToolManager: ObservableObject {
         let (localURL, response) = try await URLSession.shared.download(from: url)
         downloadProgress = 0.5
         return (localURL, response)
+    }
+
+    /// Compute the lowercase hex SHA-256 of a file. Used to verify downloaded
+    /// archives match the checksum embedded in `orbKubectlDefinition`.
+    private func sha256Hex(of fileURL: URL) throws -> String {
+        let data = try Data(contentsOf: fileURL)
+        let digest = SHA256.hash(data: data)
+        return digest.map { String(format: "%02x", $0) }.joined()
     }
 }
