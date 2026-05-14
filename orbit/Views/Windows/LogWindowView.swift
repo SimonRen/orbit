@@ -107,6 +107,19 @@ struct LogWindowView: View {
             }
         }
         .frame(minWidth: 500, minHeight: 300)
+        .background(
+            // Invisible "cancel action" button — fires on Esc anywhere in
+            // the window, regardless of which subview holds first responder.
+            // onExitCommand doesn't work reliably for WindowGroup windows
+            // because the SwiftUI view rarely owns the responder chain.
+            Button(action: { NSApp.keyWindow?.performClose(nil) }) {
+                EmptyView()
+            }
+            .keyboardShortcut(.cancelAction)
+            .frame(width: 0, height: 0)
+            .opacity(0)
+            .accessibilityHidden(true)
+        )
     }
 
     private var emptyStateView: some View {

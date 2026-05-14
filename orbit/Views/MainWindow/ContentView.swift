@@ -83,6 +83,16 @@ struct ContentView: View {
             FirstRunSheet()
                 .environmentObject(appState)
         }
+        .background(
+            // Silently swallow Esc on the main window so macOS doesn't play
+            // the unhandled-key system beep. The main window doesn't have a
+            // sensible "cancel" action; we just want to suppress the sound.
+            Button(action: {}) { EmptyView() }
+                .keyboardShortcut(.cancelAction)
+                .frame(width: 0, height: 0)
+                .opacity(0)
+                .accessibilityHidden(true)
+        )
     }
 
     private func bindFailureMessage(for info: BindFailureInfo) -> String {
