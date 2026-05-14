@@ -76,7 +76,7 @@ struct OrbitApp: App {
 
                 Divider()
 
-                Button("Import...") {
+                Button("Import Environment...") {
                     WindowCoordinator.shared.triggerImport?()
                 }
                 .keyboardShortcut("i", modifiers: .command)

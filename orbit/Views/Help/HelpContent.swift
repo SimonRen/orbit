@@ -285,9 +285,17 @@ extension HelpContent {
             .heading("Do you need it?"),
             .paragraph("No. Orbit's Kubernetes import works with plain kubectl from your $PATH. orb-kubectl is a convenience for users whose clusters have flaky API-server connections. If you're not sure, stick with kubectl."),
             .heading("Where the binary comes from (trust model)"),
-            .paragraph("orb-kubectl is shipped by the Orbit project as a GitHub Release asset. When you choose to install it, Orbit downloads the archive, verifies its SHA-256 against the value embedded in this build of Orbit, and only then writes the binary to disk. A checksum mismatch aborts the install — your existing setup is not modified."),
+            .paragraph("orb-kubectl is shipped by the Orbit project as a GitHub Release asset, built from a public fork of kubernetes/kubernetes. When you choose to install it, Orbit downloads the archive, verifies its SHA-256 against the value embedded in this build of Orbit, and only then writes the binary to disk. A checksum mismatch aborts the install — your existing setup is not modified."),
+            .heading("Source you can audit"),
             .bullets([
-                "Source: github.com/simonren/orbit/releases (orb-kubectl-vX.Y.Z asset)",
+                "Fork: github.com/simonren/kubernetes (a fork of kubernetes/kubernetes)",
+                "Branch: feature/resilient-port-forward",
+                "Patch: staging/src/k8s.io/kubectl/pkg/cmd/portforward/resilient.go",
+                "Release archive: github.com/simonren/orbit/releases (orb-kubectl-vX.Y.Z asset)",
+            ]),
+            .paragraph("The patch adds a --retry flag to kubectl port-forward that re-establishes the underlying API server connection on transient failures. You can clone the fork, inspect the diff against upstream master, and build your own copy if you'd rather not run the pre-built binary."),
+            .heading("What Orbit verifies and where it installs"),
+            .bullets([
                 "Verification: SHA-256 of the archive, compared against a value pinned in Orbit's source code",
                 "Installation path: ~/Library/Application Support/Orbit/bin/orb-kubectl",
                 "Privileges: runs as your user; no admin password required to install",
@@ -415,7 +423,7 @@ extension HelpContent {
             .heading("File"),
             .shortcutTable([
                 ("New Environment", "⌘N"),
-                ("Import...", "⌘I"),
+                ("Import Environment...", "⌘I"),
                 ("Export Archive...", "⌘⇧E"),
                 ("Import Archive...", "⌘⇧I"),
             ]),

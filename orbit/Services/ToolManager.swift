@@ -224,11 +224,14 @@ final class ToolManager: ObservableObject {
         let def = orbKubectlDefinition
         return """
             orb-kubectl is a custom build of kubectl with --retry support \
-            for port-forwarding, maintained alongside Orbit itself.
+            for port-forwarding, maintained alongside Orbit.
 
-            Version: \(def.version)
-            From: \(def.downloadURL.absoluteString)
-            SHA-256: \(def.sha256)
+            • Version: \(def.version)
+            • Archive: \(def.downloadURL.absoluteString)
+            • SHA-256: \(def.sha256)
+            • Source: github.com/simonren/kubernetes (fork of \
+              kubernetes/kubernetes, branch feature/resilient-port-forward)
+            • Patch: staging/src/k8s.io/kubectl/pkg/cmd/portforward/resilient.go
 
             Orbit verifies the SHA-256 of the downloaded archive against the \
             value embedded in this app before installing. A mismatch aborts \
@@ -239,9 +242,10 @@ final class ToolManager: ObservableObject {
             existing kubeconfig like a normal kubectl. It runs as your user \
             (no elevated privileges).
 
-            If you'd rather not trust a third-party kubectl, you can decline \
-            here and use plain kubectl from your $PATH — Orbit's Kubernetes \
-            import works with both.
+            If you'd rather not trust a third-party kubectl, decline here and \
+            use plain kubectl from your $PATH — Orbit's Kubernetes import \
+            works with both. You can also audit the source fork above and \
+            build your own copy.
             """
     }
 

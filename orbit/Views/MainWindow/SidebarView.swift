@@ -172,7 +172,7 @@ struct SidebarView: View {
                 Button(action: importEnvironment) {
                     HStack {
                         Image(systemName: "square.and.arrow.down")
-                        Text("Import...")
+                        Text("Import Environment...")
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 16)
