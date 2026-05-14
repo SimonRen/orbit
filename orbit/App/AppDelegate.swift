@@ -1,18 +1,12 @@
 import AppKit
 import SwiftUI
-import Combine
 
-/// App delegate handling menubar and app lifecycle
+/// App delegate handling app lifecycle. The menubar item lives in OrbitApp's
+/// MenuBarExtra scene; this delegate now only handles termination, dock-icon
+/// visibility, and the static activation helpers used by other windows.
 @MainActor
-class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
-    private var statusItem: NSStatusItem?
-    private var popover: NSPopover?
+class AppDelegate: NSObject, NSApplicationDelegate {
     private var appState: AppState?
-    private var cancellables = Set<AnyCancellable>()
-    private var eventMonitor: Any?
-
-    // Cached state for menu building (updated via Combine)
-    private var cachedEnvironments: [DevEnvironment] = []
 
     // Window observation
     private var windowObservers: [NSObjectProtocol] = []
@@ -25,9 +19,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         guard self.appState == nil else { return }
 
         self.appState = appState
-        setupStatusItem()
-        setupPopover()
-        observeStateChanges()
         setupWindowObservation()
 
         // Register with helper for orphan monitoring
@@ -39,7 +30,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     // MARK: - NSApplicationDelegate
 
     nonisolated func applicationDidFinishLaunching(_ notification: Notification) {
-        // Status item setup happens in configure()
+        // MenuBarExtra in OrbitApp handles the status item; nothing to do here.
     }
 
     nonisolated func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
@@ -82,39 +73,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         return false
     }
 
-    // MARK: - Status Item Setup
-
-    private func setupStatusItem() {
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-
-        if let button = statusItem?.button {
-            button.image = NSImage(systemSymbolName: "arrow.triangle.branch", accessibilityDescription: "Orbit")
-            button.target = self
-            button.action = #selector(statusItemClicked(_:))
-        }
-    }
-
-    private func setupPopover() {
-        popover = NSPopover()
-        popover?.contentSize = NSSize(width: 260, height: 200)
-        popover?.behavior = .transient
-        popover?.delegate = self
-        // Content is created lazily in showPopover() to avoid idle CPU usage
-    }
-
-    private func addEventMonitor() {
-        guard eventMonitor == nil else { return }
-        eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
-            self?.closePopover()
-        }
-    }
-
-    private func removeEventMonitor() {
-        if let monitor = eventMonitor {
-            NSEvent.removeMonitor(monitor)
-            eventMonitor = nil
-        }
-    }
+    // MARK: - Window Observation
 
     private func setupWindowObservation() {
         // Observe window visibility to toggle Dock icon
@@ -163,72 +122,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         }
     }
 
-    private func observeStateChanges() {
-        // Cache environments for status icon (SwiftUI handles popover updates)
-        appState?.$environments
-            .receive(on: RunLoop.main)
-            .sink { [weak self] environments in
-                self?.cachedEnvironments = environments
-            }
-            .store(in: &cancellables)
-    }
-
-    // MARK: - Popover Control
-
-    @objc private func statusItemClicked(_ sender: NSStatusBarButton) {
-        togglePopover()
-    }
-
-    private func togglePopover() {
-        if let popover = popover, popover.isShown {
-            closePopover()
-        } else {
-            showPopover()
-        }
-    }
-
-    private func showPopover() {
-        guard let button = statusItem?.button, let popover = popover, let appState = appState else { return }
-
-        // Create content lazily to avoid idle CPU usage from SwiftUI's CVDisplayLink
-        let contentView = StatusMenuView(appState: appState) { [weak self] in
-            self?.closePopover()
-        }
-        popover.contentViewController = NSHostingController(rootView: contentView)
-
-        // Show popover relative to the button
-        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-
-        // Configure popover window for fullscreen compatibility
-        if let popoverWindow = popover.contentViewController?.view.window {
-            popoverWindow.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-            popoverWindow.level = .popUpMenu
-        }
-
-        // Start monitoring for outside clicks
-        addEventMonitor()
-    }
-
-    private func closePopover() {
-        popover?.performClose(nil)
-    }
-
-    // MARK: - NSPopoverDelegate
-
-    nonisolated func popoverDidClose(_ notification: Notification) {
-        Task { @MainActor in
-            removeEventMonitor()
-            // Destroy content to stop SwiftUI's CVDisplayLink and save CPU
-            popover?.contentViewController = nil
-        }
-    }
-
-    // MARK: - Actions
-
-    @objc private func showMainWindow(_ sender: Any?) {
-        closePopover()
-        Self.activateAppWithDockToggle()
-    }
+    // MARK: - Activation Helpers
 
     /// Workaround for macOS bug where programmatic activation doesn't fully activate the app
     /// Solution: briefly activate the Dock, then reactivate our app - forces proper activation cycle
@@ -257,18 +151,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         }
     }
 
-    @objc private func quitApp(_ sender: Any?) {
-        closePopover()
-        NSApp.terminate(nil)
-    }
-
 }
 
 // MARK: - Status Menu SwiftUI View
 
 struct StatusMenuView: View {
     @ObservedObject var appState: AppState
-    var onDismiss: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -301,12 +189,10 @@ struct StatusMenuView: View {
             Divider()
                 .padding(.vertical, 6)
 
-            // Show Window button
+            // Show Window button — activating the app causes MenuBarExtra
+            // to lose focus and dismiss automatically.
             MenuRowButton(label: "Show Window") {
-                onDismiss()
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    AppDelegate.activateAppWithDockToggle()
-                }
+                AppDelegate.activateAppWithDockToggle()
             }
 
             Divider()
@@ -314,12 +200,12 @@ struct StatusMenuView: View {
 
             // Quit button
             MenuRowButton(label: "Quit Orbit", shortcut: "⌘Q") {
-                onDismiss()
                 NSApp.terminate(nil)
             }
             .padding(.bottom, 4)
         }
-        .frame(width: 240)
+        // MenuBarExtra(.window) supplies its own native material — no
+        // explicit background here so the system frosted look comes through.
     }
 }
 

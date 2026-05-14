@@ -120,6 +120,18 @@ struct OrbitApp: App {
             SettingsView()
                 .environmentObject(appState)
         }
+
+        // Menubar item — uses MenuBarExtra(.window) for the native rounded
+        // popover look (no triangular arrow, system material) that matches
+        // Tailscale, Just Focus, etc. Replaces the previous AppDelegate-managed
+        // NSStatusItem + NSPopover plumbing.
+        MenuBarExtra {
+            StatusMenuView(appState: appState)
+                .frame(width: 260)
+        } label: {
+            Image(systemName: "arrow.triangle.branch")
+        }
+        .menuBarExtraStyle(.window)
     }
 
     private func setupApp() {

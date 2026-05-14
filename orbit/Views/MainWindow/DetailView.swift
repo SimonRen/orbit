@@ -50,6 +50,7 @@ struct DetailView: View {
     @State private var showingUnsavedChangesOnRestore = false
     @State private var pendingRestoreIndex: Int?
     @State private var showingK8sImportSheet = false
+    @State private var copiedForAI = false
 
     private var environment: DevEnvironment? {
         appState.environments.first { $0.id == environmentId }
@@ -340,26 +341,11 @@ struct DetailView: View {
 
             Spacer()
 
-            // Unsaved changes indicator
-            if hasUnsavedChanges && !isEditingName {
-                Button("Save Changes") {
-                    saveChanges()
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .disabled(isActive || isTransitioning)
-            }
+            // Order (left to right): view past → export → import → save edits → add new.
+            // Primary action (.borderedProminent Add Service) stays rightmost per
+            // macOS convention.
 
-            // Copy for AI button
-            Button {
-                copyForAI()
-            } label: {
-                Image(systemName: "doc.on.doc")
-            }
-            .buttonStyle(.bordered)
-            .help("Copy for AI")
-
-            // History button
+            // History button — view past snapshots of this environment.
             Button {
                 showHistoryPopover = true
             } label: {
@@ -386,6 +372,21 @@ struct DetailView: View {
                 }
             }
 
+            // Copy for AI button — copies the environment definition
+            // (name, IPs, services) as a markdown text block ready to paste
+            // into an AI chat for help configuring or debugging.
+            Button {
+                copyForAI()
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: copiedForAI ? "checkmark" : "doc.on.doc")
+                    Text(copiedForAI ? "Copied" : "Copy for AI")
+                }
+                .foregroundColor(copiedForAI ? .green : nil)
+            }
+            .buttonStyle(.bordered)
+            .help("Copy environment as text for an AI assistant")
+
             // Import from K8s button
             Button {
                 showingK8sImportSheet = true
@@ -398,7 +399,17 @@ struct DetailView: View {
             .buttonStyle(.bordered)
             .disabled(isActive || isTransitioning)
 
-            // Add service button
+            // Unsaved changes indicator
+            if hasUnsavedChanges && !isEditingName {
+                Button("Save Changes") {
+                    saveChanges()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(isActive || isTransitioning)
+            }
+
+            // Add service button (primary action — borderedProminent, rightmost).
             Button {
                 showingAddServiceSheet = true
             } label: {
@@ -614,6 +625,13 @@ struct DetailView: View {
         let text = envCopy.copyableAIDescription()
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
+
+        // Flash a checkmark for ~1.5s as visual confirmation, mirroring
+        // the pattern used by the per-service Copy buttons.
+        copiedForAI = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            copiedForAI = false
+        }
     }
 
     private func suggestNextIP() -> String {
