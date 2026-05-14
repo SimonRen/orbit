@@ -128,12 +128,60 @@ final class HelperClient: ObservableObject {
         }
     }
 
-    /// Uninstall the privileged helper
+    /// Uninstall the privileged helper.
+    ///
+    /// The helper is installed via the legacy SMJobBless API. The matching
+    /// uninstall is SMJobRemove. (SMAppService.daemon(plistName:).unregister()
+    /// is the newer API but it returns "Invalid argument" for daemons that
+    /// were originally registered via SMJobBless, so we use SMJobRemove
+    /// regardless of macOS version. It's deprecated but still functional and
+    /// is the only API that reliably reverses an SMJobBless install.)
     func uninstallHelper() async throws {
-        if #available(macOS 13.0, *) {
-            let service = SMAppService.daemon(plistName: "com.orbit.helper.plist")
-            try await service.unregister()
+        var authRef: AuthorizationRef?
+        let authStatus = AuthorizationCreate(nil, nil, [], &authRef)
+
+        guard authStatus == errAuthorizationSuccess, let auth = authRef else {
+            throw HelperClientError.installationFailed("Failed to create authorization")
+        }
+
+        defer { AuthorizationFree(auth, []) }
+
+        var authItem = AuthorizationItem(
+            name: kSMRightModifySystemDaemons,
+            valueLength: 0,
+            value: nil,
+            flags: 0
+        )
+        var authRights = AuthorizationRights(count: 1, items: &authItem)
+        let flags: AuthorizationFlags = [.interactionAllowed, .preAuthorize, .extendRights]
+        let rightStatus = AuthorizationCopyRights(auth, &authRights, nil, flags, nil)
+
+        guard rightStatus == errAuthorizationSuccess else {
+            if rightStatus == errAuthorizationCanceled {
+                throw HelperClientError.installationFailed("Authorization cancelled")
+            }
+            throw HelperClientError.installationFailed("Authorization failed: \(rightStatus)")
+        }
+
+        var error: Unmanaged<CFError>?
+        let success = SMJobRemove(
+            kSMDomainSystemLaunchd,
+            "com.orbit.helper" as CFString,
+            auth,
+            true,
+            &error
+        )
+
+        if success {
             isHelperInstalled = false
+            needsUpgrade = false
+            installedVersion = nil
+            // Invalidate any cached XPC connection so a stale handle isn't reused.
+            connection?.invalidate()
+            connection = nil
+        } else {
+            let errorDesc = error?.takeRetainedValue().localizedDescription ?? "Unknown error"
+            throw HelperClientError.installationFailed(errorDesc)
         }
     }
 
