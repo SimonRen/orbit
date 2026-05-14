@@ -5,6 +5,7 @@ class WindowCoordinator: ObservableObject {
     static let shared = WindowCoordinator()
     var openMainWindow: (() -> Void)?
     var openLogWindow: ((UUID) -> Void)?  // Opens log window for service ID
+    var openHelpWindow: (() -> Void)?  // Opens the Orbit Help window
     var triggerImport: (() -> Void)?  // Triggers single-file import dialog
     var triggerBulkImport: (() -> Void)?  // Triggers bulk archive import dialog
     var triggerBulkExport: (() -> Void)?  // Triggers bulk export dialog
@@ -40,6 +41,9 @@ struct OrbitApp: App {
                     }
                     WindowCoordinator.shared.openLogWindow = { [openWindow] serviceId in
                         openWindow(id: "logs", value: serviceId)
+                    }
+                    WindowCoordinator.shared.openHelpWindow = { [openWindow] in
+                        openWindow(id: "help")
                     }
                 }
         }
@@ -113,7 +117,23 @@ struct OrbitApp: App {
                 .keyboardShortcut("s", modifiers: [.command, .shift])
                 .disabled(appState.selectedEnvironmentId == nil)
             }
+
+            // Replace the default Help menu (which only shows the no-op
+            // "Help isn't available" search box) with a real Orbit Help entry.
+            CommandGroup(replacing: .help) {
+                Button("Orbit Help") {
+                    WindowCoordinator.shared.openHelpWindow?()
+                }
+                .keyboardShortcut("?", modifiers: .command)
+            }
         }
+
+        // Help window
+        WindowGroup(id: "help") {
+            HelpWindowView()
+        }
+        .windowStyle(.titleBar)
+        .defaultSize(width: 920, height: 640)
 
         // Settings scene (⌘,) — launch-at-login + helper management.
         Settings {
