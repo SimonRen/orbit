@@ -20,7 +20,33 @@ struct ImportPreviewSheet: View {
                     .font(.callout)
                     .foregroundColor(.secondary)
             }
-            .padding(.bottom, 20)
+            .padding(.bottom, 12)
+
+            // Trust banner — service commands are executable shell.
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundColor(.orange)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Service commands run as you")
+                        .font(.callout)
+                        .fontWeight(.medium)
+                    Text("Each service below runs its command via /bin/bash -c when toggled on. Review the commands before importing. Imported services land disabled — you must explicitly enable each one after reviewing it.")
+                        .font(.callout)
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(12)
+            .background(Color.orange.opacity(0.10))
+            .overlay(
+                Rectangle()
+                    .fill(Color.orange)
+                    .frame(width: 3),
+                alignment: .leading
+            )
+            .cornerRadius(6)
+            .padding(.bottom, 16)
 
             // Content
             VStack(alignment: .leading, spacing: 16) {
@@ -203,19 +229,33 @@ struct ImportPreviewSheet: View {
     }
 
     private func serviceRow(service: ExportedService) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: service.isEnabled ? "checkmark.circle.fill" : "circle")
-                .foregroundColor(service.isEnabled ? .green : .secondary)
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "terminal")
+                .foregroundColor(.secondary)
+                .padding(.top, 2)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(service.name)
-                    .font(.body)
-                Text("Ports: \(service.ports)")
-                    .font(.callout)
-                    .foregroundColor(.secondary)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    Text(service.name)
+                        .font(.body)
+                        .fontWeight(.medium)
+                    Text("Ports: \(service.ports)")
+                        .font(.callout)
+                        .foregroundColor(.secondary)
+                }
+                Text(service.command)
+                    .font(.system(.callout, design: .monospaced))
+                    .foregroundColor(.primary)
+                    .lineLimit(3)
+                    .textSelection(.enabled)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color(nsColor: .textBackgroundColor))
+                    .cornerRadius(4)
             }
 
-            Spacer()
+            Spacer(minLength: 0)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)

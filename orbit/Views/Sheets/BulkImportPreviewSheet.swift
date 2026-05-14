@@ -332,17 +332,29 @@ private struct EnvironmentRow: View {
                                 .foregroundColor(.secondary)
 
                             ForEach(Array(preview.preview.services.enumerated()), id: \.offset) { _, service in
-                                HStack(spacing: 8) {
-                                    Image(systemName: service.isEnabled ? "checkmark.circle.fill" : "circle")
-                                        .font(.callout)
-                                        .foregroundColor(service.isEnabled ? .green : .secondary)
-
-                                    Text(service.name)
-                                        .font(.callout)
-
-                                    Text("(\(service.ports))")
-                                        .font(.callout)
-                                        .foregroundColor(.secondary)
+                                VStack(alignment: .leading, spacing: 3) {
+                                    HStack(spacing: 8) {
+                                        Image(systemName: "terminal")
+                                            .font(.callout)
+                                            .foregroundColor(.secondary)
+                                        Text(service.name)
+                                            .font(.callout)
+                                            .fontWeight(.medium)
+                                        Text("(\(service.ports))")
+                                            .font(.callout)
+                                            .foregroundColor(.secondary)
+                                    }
+                                    // Show the command so the user can audit what
+                                    // will run before enabling the service.
+                                    Text(service.command)
+                                        .font(.system(.callout, design: .monospaced))
+                                        .lineLimit(2)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .background(Color(nsColor: .textBackgroundColor))
+                                        .cornerRadius(4)
+                                        .textSelection(.enabled)
                                 }
                             }
                         }
