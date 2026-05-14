@@ -52,6 +52,13 @@ final class NetworkManager {
         try await helperClient.installHelper()
     }
 
+    /// Uninstall the privileged helper. After this, the app falls back to
+    /// non-root mode and can only activate environments whose IPs are already
+    /// aliased on lo0.
+    func uninstallHelper() async throws {
+        try await helperClient.uninstallHelper()
+    }
+
     /// Check helper status
     func checkHelperStatus() {
         helperClient.checkHelperStatus()
@@ -174,6 +181,19 @@ final class NetworkManager {
         } catch {
             return []
         }
+    }
+
+    /// Check which of the requested IPs are NOT currently configured on lo0.
+    /// Used in non-root mode to detect whether the user has already aliased
+    /// the addresses themselves (via `sudo ifconfig`) before activation.
+    /// - Parameter requested: IPs an environment needs (typically all 127.x.x.x).
+    /// - Returns: Subset of `requested` not currently aliased on lo0. Empty
+    ///   means all interfaces are ready and activation can proceed without the helper.
+    nonisolated func checkInterfacesPresent(_ requested: [String]) -> [String] {
+        let active = Set(activeLoopbackAliases())
+        // 127.0.0.1 is always present on macOS even though activeLoopbackAliases() filters it.
+        let alwaysPresent: Set<String> = ["127.0.0.1"]
+        return requested.filter { !active.contains($0) && !alwaysPresent.contains($0) }
     }
 
     /// Remove orphaned loopback aliases that belong to Orbit environments but

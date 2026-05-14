@@ -114,6 +114,12 @@ struct OrbitApp: App {
                 .disabled(appState.selectedEnvironmentId == nil)
             }
         }
+
+        // Settings scene (⌘,) — launch-at-login + helper management.
+        Settings {
+            SettingsView()
+                .environmentObject(appState)
+        }
     }
 
     private func setupApp() {

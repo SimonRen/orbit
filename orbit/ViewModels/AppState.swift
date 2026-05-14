@@ -17,6 +17,14 @@ final class AppState: ObservableObject {
     @Published var showHelperInstallPrompt: Bool = false
     @Published var showHelperUpgradePrompt: Bool = false
 
+    /// Set by activateEnvironment when autoManage is off and one or more IPs
+    /// aren't aliased on lo0. UI shows the recovery alert when non-nil.
+    @Published var bindFailureAlert: BindFailureInfo?
+
+    /// First-run setup sheet should be shown to this user.
+    /// Set once on launch; cleared on dismiss; persisted via UserDefaults.
+    @Published var shouldShowFirstRunSetup: Bool = false
+
     /// Logs stored separately to avoid triggering full environments publisher on every log line
     @Published var serviceLogs: [UUID: [LogEntry]] = [:]
 
@@ -29,6 +37,24 @@ final class AppState: ObservableObject {
     var helperNeedsUpgrade: Bool {
         networkManager?.needsUpgrade ?? false
     }
+
+    /// Installed helper version (passthrough to NetworkManager, for Settings UI).
+    var networkManagerInstalledVersion: String? {
+        networkManager?.installedVersion
+    }
+
+    /// User preference: should Orbit's privileged helper manage lo0 aliases
+    /// automatically on activation? Read from UserDefaults each time (not cached)
+    /// so toggling in Settings takes effect immediately.
+    private var autoManageInterfacesPref: Bool {
+        // Default true — preserves current behavior for users without the setting set.
+        UserDefaults.standard.object(forKey: "autoManageInterfaces") as? Bool ?? true
+    }
+
+    /// Track which active environments had their aliases installed by the helper
+    /// during this activation. Used on deactivation to know whether to call
+    /// removeInterfaceAlias — preventing accidental removal of user-managed aliases.
+    private var helperOwnedActivations: Set<UUID> = []
 
     // MARK: - Runtime State
 
@@ -145,6 +171,38 @@ final class AppState: ObservableObject {
             let knownIPs = Set(environments.flatMap { $0.interfaceIPs })
             await networkManager.cleanupOrphanedAliases(ownedIPs: knownIPs)
         }
+
+        // First-run setup decision. Defer slightly so HelperClient's XPC status
+        // ping has a chance to resolve — without it, an existing user with the
+        // helper installed could briefly look like a first-time user.
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 800_000_000)  // 0.8s
+            await MainActor.run {
+                self?.evaluateFirstRunSetup()
+            }
+        }
+    }
+
+    /// Decide whether to show the first-run welcome sheet. Runs once per app
+    /// install: `hasShownFirstRunSetup` flag is sticky. Existing users (helper
+    /// installed OR environments already configured) are skipped silently.
+    private func evaluateFirstRunSetup() {
+        let alreadyShown = UserDefaults.standard.bool(forKey: "hasShownFirstRunSetup")
+        if alreadyShown { return }
+
+        let isExistingUser = isHelperInstalled || !environments.isEmpty
+        if isExistingUser {
+            // Silently set the flag — they already have everything set up.
+            // Mirror their actual state to the prefs so Settings displays correctly.
+            UserDefaults.standard.set(true, forKey: "hasShownFirstRunSetup")
+            if UserDefaults.standard.object(forKey: "autoManageInterfaces") == nil {
+                UserDefaults.standard.set(isHelperInstalled, forKey: "autoManageInterfaces")
+            }
+            return
+        }
+
+        // Genuine first launch.
+        shouldShowFirstRunSetup = true
     }
 
     // MARK: - Configuration Loading/Saving
@@ -480,10 +538,18 @@ final class AppState: ObservableObject {
         // Mark as transitioning
         environments[index].isTransitioning = true
 
+        let useHelperForInterfaces = autoManageInterfacesPref && isHelperInstalled
+
         Task {
             do {
-                // 1. Bring up interfaces
-                try await networkManager.activateInterfaces(env.interfaces)
+                // 1. Bring up interfaces (only when helper is in charge — in non-root
+                //    mode the user has already aliased them on lo0 themselves).
+                if useHelperForInterfaces {
+                    try await networkManager.activateInterfaces(env.interfaces)
+                    helperOwnedActivations.insert(id)
+                } else {
+                    helperOwnedActivations.remove(id)
+                }
 
                 // Bail if shutdown started or environment was deactivated while awaiting
                 guard !isShuttingDown,
@@ -508,6 +574,7 @@ final class AppState: ObservableObject {
                 if let idx = environments.firstIndex(where: { $0.id == id }) {
                     environments[idx].isTransitioning = false
                 }
+                helperOwnedActivations.remove(id)
                 self.lastError = .activationFailed(error.localizedDescription)
             }
         }
@@ -559,8 +626,13 @@ final class AppState: ObservableObject {
             guard let self = self else { return }
 
             Task { @MainActor in
-                // 2. Bring down interfaces
-                await networkManager.deactivateInterfaces(env.interfaces)
+                // 2. Bring down interfaces — only if this activation owned them
+                //    (helper added them on activate). If user manages aliases manually
+                //    we must NOT remove what they set up.
+                if self.helperOwnedActivations.contains(id), self.isHelperInstalled {
+                    await networkManager.deactivateInterfaces(env.interfaces)
+                }
+                self.helperOwnedActivations.remove(id)
 
                 // 3. Mark environment as disabled and clear transitioning
                 if let envIndex = self.environments.firstIndex(where: { $0.id == id }) {
@@ -588,15 +660,31 @@ final class AppState: ObservableObject {
         }
         lastEnvironmentToggleTime[id] = Date()
 
-        // Check if helper is installed and up-to-date before activating
+        // Pre-activation checks vary based on whether the user wants automatic
+        // loopback management. autoManageInterfaces ON keeps the existing flow
+        // (require helper). OFF means the user manages aliases manually; we just
+        // need to verify the IPs they configured are present before spawning.
         if !env.isEnabled {
-            if !isHelperInstalled {
-                showHelperInstallPrompt = true
-                return
-            }
-            if helperNeedsUpgrade {
-                showHelperUpgradePrompt = true
-                return
+            if autoManageInterfacesPref {
+                if !isHelperInstalled {
+                    showHelperInstallPrompt = true
+                    return
+                }
+                if helperNeedsUpgrade {
+                    showHelperUpgradePrompt = true
+                    return
+                }
+            } else {
+                guard let networkManager = networkManager else { return }
+                let needed = env.interfaces.map(\.ip)
+                let missing = networkManager.checkInterfacesPresent(needed)
+                if !missing.isEmpty {
+                    bindFailureAlert = BindFailureInfo(
+                        environmentId: id,
+                        missingIPs: missing
+                    )
+                    return
+                }
             }
         }
 
@@ -633,9 +721,34 @@ final class AppState: ObservableObject {
             try await networkManager.installHelper()
             showHelperInstallPrompt = false
             showHelperUpgradePrompt = false
+            lastError = nil
         } catch {
             lastError = .privilegeError(error.localizedDescription)
         }
+    }
+
+    /// Uninstall the privileged helper. Active environments stay running but
+    /// future activations will fall back to non-root mode unless reinstalled.
+    func uninstallHelper() async {
+        guard let networkManager = networkManager else { return }
+
+        do {
+            try await networkManager.uninstallHelper()
+            lastError = nil
+        } catch {
+            lastError = .privilegeError(error.localizedDescription)
+        }
+    }
+
+    /// Dismiss the bind-failure alert (called from UI).
+    func dismissBindFailure() {
+        bindFailureAlert = nil
+    }
+
+    /// Acknowledge the first-run sheet — persists the flag so it won't show again.
+    func markFirstRunSetupComplete() {
+        UserDefaults.standard.set(true, forKey: "hasShownFirstRunSetup")
+        shouldShowFirstRunSetup = false
     }
 
     // MARK: - Service Process Management
@@ -1392,6 +1505,22 @@ final class AppState: ObservableObject {
         }
 
         return "\(baseName) (\(counter))"
+    }
+}
+
+// MARK: - Bind Failure Info
+
+/// Surfaced when the user attempts to activate an environment in non-root mode
+/// but one or more required IPs aren't aliased on lo0. The UI shows a recovery
+/// alert with options to install the helper, see the manual command, or cancel.
+struct BindFailureInfo: Identifiable, Equatable {
+    let id = UUID()
+    let environmentId: UUID
+    let missingIPs: [String]
+
+    /// Single-line manual remediation command for the user to copy/run.
+    var manualCommand: String {
+        missingIPs.map { "sudo ifconfig lo0 alias \($0)" }.joined(separator: " && ")
     }
 }
 

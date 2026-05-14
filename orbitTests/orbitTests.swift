@@ -1,4 +1,5 @@
 import XCTest
+import ServiceManagement
 @testable import Orbit
 
 final class OrbitTests: XCTestCase {
@@ -1109,5 +1110,62 @@ final class KubernetesServiceTests: XCTestCase {
         let badData = "not json".data(using: .utf8)!
         XCTAssertThrowsError(try KubernetesService.parseNamespaces(from: badData))
         XCTAssertThrowsError(try KubernetesService.parseServices(from: badData))
+    }
+
+    // MARK: - NetworkManager Interface Presence
+
+    /// 127.0.0.1 is always configured on macOS, so it must never be reported as missing.
+    /// A clearly-unrealistic loopback alias (way outside what anyone would alias) must be missing.
+    @MainActor
+    func testCheckInterfacesPresent_baseline() {
+        let manager = NetworkManager.shared
+
+        let missing = manager.checkInterfacesPresent(["127.0.0.1"])
+        XCTAssertTrue(missing.isEmpty, "127.0.0.1 should always be present on macOS")
+
+        // Use a value that's syntactically a loopback but extremely unlikely to be
+        // aliased on any developer machine; the test catalogs reality at run time.
+        let extremelyUnlikely = "127.231.241.251"
+        let result = manager.checkInterfacesPresent([extremelyUnlikely])
+        // We don't assert this IS missing — a developer might have aliased it. We just
+        // assert the function returns a well-formed result.
+        XCTAssertTrue(result.allSatisfy { $0 == extremelyUnlikely })
+    }
+
+    @MainActor
+    func testCheckInterfacesPresent_filtersOnlyMissing() {
+        let manager = NetworkManager.shared
+        let result = manager.checkInterfacesPresent(["127.0.0.1", "127.231.241.252"])
+        // 127.0.0.1 must be present, so it must NOT appear in the missing list.
+        XCTAssertFalse(result.contains("127.0.0.1"))
+    }
+
+    // MARK: - LoginItemService
+
+    /// Read-only check — never side-effects the CI machine's login items.
+    @MainActor
+    func testLoginItemService_statusIsReadable() {
+        let service = LoginItemService.shared
+        // Status is always a valid enum case; this just confirms the API responds.
+        let status = service.status
+        let validStates: [SMAppService.Status] = [
+            .enabled, .notRegistered, .notFound, .requiresApproval
+        ]
+        XCTAssertTrue(validStates.contains(status), "Status \(status) should be a known enum case")
+    }
+
+    // MARK: - BindFailureInfo
+
+    func testBindFailureInfo_manualCommandSingleIP() {
+        let info = BindFailureInfo(environmentId: UUID(), missingIPs: ["127.0.0.7"])
+        XCTAssertEqual(info.manualCommand, "sudo ifconfig lo0 alias 127.0.0.7")
+    }
+
+    func testBindFailureInfo_manualCommandMultipleIPs() {
+        let info = BindFailureInfo(environmentId: UUID(), missingIPs: ["127.0.0.7", "127.0.0.8"])
+        XCTAssertEqual(
+            info.manualCommand,
+            "sudo ifconfig lo0 alias 127.0.0.7 && sudo ifconfig lo0 alias 127.0.0.8"
+        )
     }
 }

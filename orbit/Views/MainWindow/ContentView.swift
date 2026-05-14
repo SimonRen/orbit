@@ -53,6 +53,48 @@ struct ContentView: View {
         } message: {
             Text("Orbit needs to upgrade its privileged helper to a newer version. This requires administrator permission.")
         }
+        .alert(
+            "Interface not configured",
+            isPresented: Binding(
+                get: { appState.bindFailureAlert != nil },
+                set: { if !$0 { appState.dismissBindFailure() } }
+            ),
+            presenting: appState.bindFailureAlert
+        ) { info in
+            Button("Install Helper Now") {
+                Task {
+                    await appState.installHelper()
+                    appState.dismissBindFailure()
+                }
+            }
+            Button("Copy Manual Command") {
+                let pb = NSPasteboard.general
+                pb.clearContents()
+                pb.setString(info.manualCommand, forType: .string)
+                appState.dismissBindFailure()
+            }
+            Button("Cancel", role: .cancel) {
+                appState.dismissBindFailure()
+            }
+        } message: { info in
+            Text(bindFailureMessage(for: info))
+        }
+        .sheet(isPresented: $appState.shouldShowFirstRunSetup) {
+            FirstRunSheet()
+                .environmentObject(appState)
+        }
+    }
+
+    private func bindFailureMessage(for info: BindFailureInfo) -> String {
+        let ips = info.missingIPs.joined(separator: ", ")
+        return """
+            The address(es) \(ips) aren't configured on lo0.
+
+            Install the helper so Orbit can manage interfaces automatically, \
+            or copy the manual command and run it in Terminal:
+
+                \(info.manualCommand)
+            """
     }
 }
 
