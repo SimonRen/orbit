@@ -189,9 +189,12 @@ struct StatusMenuView: View {
             Divider()
                 .padding(.vertical, 6)
 
-            // Show Window button — activating the app causes MenuBarExtra
-            // to lose focus and dismiss automatically.
+            // Show Window button. We have to close the MenuBarExtra window
+            // explicitly — the Dock-toggle activation trick takes ~200ms, and
+            // during that time the menubar window stays key and visible.
+            // Close it first, then activate the main window.
             MenuRowButton(label: "Show Window") {
+                NSApp.keyWindow?.close()
                 AppDelegate.activateAppWithDockToggle()
             }
 

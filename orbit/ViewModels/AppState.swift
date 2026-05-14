@@ -664,10 +664,12 @@ final class AppState: ObservableObject {
             if autoManageInterfacesPref {
                 if !isHelperInstalled {
                     showHelperInstallPrompt = true
+                    surfaceMainWindowForAlert()
                     return
                 }
                 if helperNeedsUpgrade {
                     showHelperUpgradePrompt = true
+                    surfaceMainWindowForAlert()
                     return
                 }
             } else {
@@ -679,6 +681,7 @@ final class AppState: ObservableObject {
                         environmentId: id,
                         missingIPs: missing
                     )
+                    surfaceMainWindowForAlert()
                     return
                 }
             }
@@ -739,6 +742,16 @@ final class AppState: ObservableObject {
     /// Dismiss the bind-failure alert (called from UI).
     func dismissBindFailure() {
         bindFailureAlert = nil
+    }
+
+    /// Ensure the main window is open + focused so an alert state (helper
+    /// install/upgrade prompt, bind-failure recovery) actually renders. The
+    /// alerts are attached to ContentView, which only exists inside the main
+    /// window — when the user toggles from the menubar popup with no main
+    /// window visible, the alert state flips but nothing displays.
+    private func surfaceMainWindowForAlert() {
+        WindowCoordinator.shared.openMainWindow?()
+        AppDelegate.activateAppWithDockToggle()
     }
 
     /// Acknowledge the first-run sheet — persists the flag so it won't show again.
