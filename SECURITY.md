@@ -19,10 +19,15 @@ You'll get an initial reply within 5 business days. We aim to ship a fix within 
 
 In scope:
 
-- **Privileged helper (`com.orbit.helper`)** — XPC service running as root. Anything that lets a non-Orbit process invoke its API, bypass code-signature verification, or escalate privileges beyond `lo0` alias management.
-- **Process spawning (`ProcessManager`)** — command injection, environment manipulation, or PATH hijacking that could be triggered via attacker-influenced service definitions.
-- **Config/import paths** — malicious `.orbit.json` or `.orbit.zip` payloads that escape their parsing scope (path traversal, arbitrary write).
+- **Privileged helper (`com.orbit.helper`)** — XPC service running as root, installed via SMJobBless (legacy API; deprecated but functional). Anything that lets a non-Orbit process invoke its API, bypass code-signature verification, or escalate privileges beyond `lo0` alias management. Note: when uninstalled via Settings, the helper's on-disk plist and binary at `/Library/LaunchDaemons/com.orbit.helper.plist` and `/Library/PrivilegedHelperTools/com.orbit.helper` may persist until the helper self-destructs (v1.3.0+) or the user removes them manually with `sudo`.
+- **Process spawning (`ProcessManager`)** — command injection, environment manipulation, or PATH hijacking that could be triggered via attacker-influenced service definitions. Note: imported service commands are *executable shell* — see "Import safety" below.
+- **Config/import paths** — malicious `.orbit.json` or `.orbit.zip` payloads that escape their parsing scope (path traversal, arbitrary write), or that contain attacker-supplied commands designed to look benign in the import preview.
+- **`orb-kubectl` supply chain** — anything that lets an attacker substitute a malicious binary past the embedded SHA-256 verification. The binary is a modified Kubernetes build hosted as a GitHub Release asset of this repo (see [NOTICE](NOTICE)) and is downloaded only if the user opts in.
 - **Auto-update (Sparkle)** — anything that lets an attacker substitute a non-genuine update past EdDSA signature validation.
+
+## Import safety
+
+A `.orbit.json` / `.orbit.zip` file contains service entries whose `command` field is run via `/bin/bash -c` when the service is activated. Imports happen at the user's privilege level (no root involved), but a shared config from an untrusted source CAN execute arbitrary user-level commands. Always review imported commands in the preview sheet before activating.
 
 Out of scope:
 

@@ -315,26 +315,39 @@ extension HelpContent {
     static let helperArticle = HelpArticle(
         id: "helper",
         title: "The Privileged Helper",
-        summary: "What the helper is, what it does, and the security model.",
+        summary: "What the helper is, what it does, the security model, and what 'uninstall' actually does.",
         body: [
-            .paragraph("Configuring loopback interface aliases (ifconfig lo0 alias 127.0.0.x) requires root. To avoid prompting for an admin password every time you toggle an environment, Orbit installs a small privileged XPC service called com.orbit.helper that runs as root and exposes a narrow API."),
+            .paragraph("Configuring loopback interface aliases (ifconfig lo0 alias 127.0.0.x) requires root. To avoid prompting for an admin password every time you toggle an environment, Orbit installs a small privileged XPC service called com.orbit.helper that runs as root (as a launchd daemon) and exposes a narrow API."),
+            .note(severity: .warn, "The helper runs as root. Treat installing it the same way you'd treat any privileged system extension. Decline at first-run if you'd rather manage lo0 aliases yourself with sudo ifconfig."),
             .heading("What it can do"),
             .bullets([
-                "Add or remove 127.x.x.x aliases on lo0.",
+                "Add or remove 127.x.x.x aliases on lo0 (via /sbin/ifconfig with an argument array — no shell).",
                 "Watch Orbit's PID and reap orphaned process groups if Orbit crashes.",
             ]),
             .heading("What it cannot do"),
             .bullets([
-                "Run arbitrary commands.",
+                "Run arbitrary commands. The XPC protocol exposes only the operations above.",
                 "Modify anything outside lo0.",
-                "Accept connections from any process that isn't a code-signature-verified copy of Orbit.",
+                "Accept connections from any process that isn't a code-signature-verified copy of Orbit (same Apple team ID + bundle identifier).",
+            ]),
+            .heading("Where it lives on disk"),
+            .bullets([
+                "Launchd plist: /Library/LaunchDaemons/com.orbit.helper.plist",
+                "Binary: /Library/PrivilegedHelperTools/com.orbit.helper",
+                "Both are owned by root and only writable as root.",
             ]),
             .heading("Installation"),
-            .paragraph("The helper is installed via Apple's SMJobBless API the first time you ask for it (first-run prompt, the reactive prompt when you toggle an environment without the helper, or the Install button in Settings). You'll see one admin password prompt; afterward it runs unattended."),
+            .paragraph("The helper is installed via Apple's SMJobBless API the first time you ask for it (first-run prompt, the reactive prompt when you toggle an environment without the helper, or the Install button in Settings). You'll see one admin password prompt; afterward it runs unattended until you uninstall it."),
             .heading("Security verification"),
-            .paragraph("The helper validates every incoming XPC connection against a SecRequirement that pins both Orbit's team identifier and its bundle identifier. An attacker would need a binary signed by the same Apple Developer team using the same bundle ID to talk to it."),
-            .heading("Uninstall"),
-            .paragraph("Settings → Network → Uninstall helper... removes the daemon. Existing aliases stay until you toggle off or reboot. You can re-install at any time."),
+            .paragraph("The helper validates every incoming XPC connection against a SecRequirement that pins Orbit's Apple-anchor, team identifier, and bundle identifier via SecCodeCheckValidity. An attacker would need a binary signed by the same Apple Developer team using the same bundle ID to talk to it."),
+            .heading("Uninstall (and what it leaves behind)"),
+            .paragraph("Settings → Network → Uninstall helper... asks the helper to remove itself, then unregisters it from launchd via SMJobRemove. After uninstall:"),
+            .bullets([
+                "The launchd job is removed; no more root daemon runs at boot.",
+                "If you're on helper v1.3.0 or newer, the helper deletes its own binary and launchd plist as its final act.",
+                "If you're on an older helper, the files at the paths above may remain. They're inert (launchd no longer references them) but persist until you remove them with `sudo rm`.",
+                "Existing 127.x.x.x aliases on lo0 stay until you toggle environments off or reboot.",
+            ]),
         ]
     )
 
@@ -370,6 +383,8 @@ extension HelpContent {
             .paragraph("File → Export Archive... (⌘⇧E) packs every environment into a single dated .orbit.zip archive — e.g. 20260514.orbit.zip. The archive includes a manifest.json plus one .orbit.json per environment."),
             .paragraph("File → Import Archive... (⌘⇧I) restores from an archive, with per-environment conflict resolution on import."),
             .note(severity: .tip, "Use the bulk archive for laptop migrations or shared team setups. Use single export for sending one config to a coworker who's debugging the same service."),
+            .heading("Treat imports like untrusted code"),
+            .note(severity: .warn, "An imported service's command is shell code that runs as you. The import preview shows the full command before activation — read it carefully when accepting a config from someone else. Imported services land in a disabled state by default; you have to explicitly toggle one on for its command to run."),
         ]
     )
 

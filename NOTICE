@@ -24,3 +24,30 @@ XcodeGen (development dependency)
   Copyright (c) Yonas Kolb.
   Licensed under the MIT License.
   https://github.com/yonaskolb/XcodeGen
+
+--------------------------------------------------------------------------------
+orb-kubectl (optional, downloaded on-demand from GitHub Releases)
+
+  orb-kubectl is a modified build of kubectl from the Kubernetes project
+  with an added --retry flag for `kubectl port-forward`. It is distributed
+  as a separate GitHub Release asset (not bundled in the Orbit app) and is
+  downloaded only if the user opts in via Settings → Tools.
+
+  Kubernetes
+    Copyright the Kubernetes Authors.
+    Licensed under the Apache License, Version 2.0.
+    https://github.com/kubernetes/kubernetes
+    https://www.apache.org/licenses/LICENSE-2.0
+
+  Modifications
+    The --retry support patch lives in:
+      staging/src/k8s.io/kubectl/pkg/cmd/portforward/resilient.go
+    Source fork:
+      https://github.com/simonren/kubernetes
+      branch: feature/resilient-port-forward
+    The fork is public; the modification is auditable in its entirety.
+
+  Per Apache-2.0 §4(b), the fork retains the upstream LICENSE and NOTICE
+  files. Per §4(c), this NOTICE entry documents that orb-kubectl contains
+  modifications carrying the SHA-256 pinned in Orbit's ToolManager at the
+  time of each Orbit release.

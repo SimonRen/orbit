@@ -1,7 +1,9 @@
 # Orbit - Makefile for build and release automation
 #
 # Usage:
-#   make build          - Debug build
+#   make build          - Debug build (signed via Config/Project.xcconfig)
+#   make build-unsigned - Debug build without signing (CI / external contributors)
+#   make test           - Run unit tests (no signing required)
 #   make release        - Release build with signing
 #   make run            - Build and run debug
 #   make clean          - Clean build artifacts
@@ -30,7 +32,7 @@ GREEN := \033[0;32m
 YELLOW := \033[0;33m
 NC := \033[0m # No Color
 
-.PHONY: all generate build release run clean dmg notarize tag help verify-sign
+.PHONY: all generate build build-unsigned test release run clean dmg notarize tag help verify-sign
 
 # Default target
 all: build
@@ -40,11 +42,33 @@ generate:
 	@echo "$(GREEN)Generating Xcode project...$(NC)"
 	xcodegen generate
 
-# Debug build
+# Debug build (signed with whatever identity Config/Project.xcconfig resolves to;
+# defaults to DN4YAHWP2P -- override locally via Config/Project.local.xcconfig).
 build: generate
 	@echo "$(GREEN)Building debug...$(NC)"
 	xcodebuild -project $(PROJECT) -scheme $(SCHEME) -configuration Debug build
 	@echo "$(GREEN)Build complete: $(DEBUG_APP)$(NC)"
+
+# Debug build without code signing (for contributors without an Apple Developer
+# team, or for CI). The privileged helper won't install/work without proper
+# signing, but the app compiles and the test bundle runs.
+build-unsigned: generate
+	@echo "$(GREEN)Building debug (unsigned)...$(NC)"
+	xcodebuild -project $(PROJECT) -scheme $(SCHEME) -configuration Debug \
+		CODE_SIGNING_ALLOWED=NO \
+		CODE_SIGNING_REQUIRED=NO \
+		CODE_SIGN_IDENTITY="" \
+		build
+
+# Run the unit test suite. Doesn't require code signing.
+test: generate
+	@echo "$(GREEN)Running tests...$(NC)"
+	xcodebuild -project $(PROJECT) -scheme $(SCHEME) \
+		-destination 'platform=macOS' \
+		CODE_SIGNING_ALLOWED=NO \
+		CODE_SIGNING_REQUIRED=NO \
+		CODE_SIGN_IDENTITY="" \
+		test
 
 # Release build with code signing
 release: generate
@@ -136,10 +160,12 @@ help:
 	@echo "Usage: make [target]"
 	@echo ""
 	@echo "Targets:"
-	@echo "  build        - Debug build"
-	@echo "  release      - Release build with code signing"
-	@echo "  run          - Build and run debug"
-	@echo "  clean        - Clean build artifacts"
+	@echo "  build         - Debug build (signed)"
+	@echo "  build-unsigned - Debug build without code signing (CI / external contributors)"
+	@echo "  test          - Run unit tests (no signing required)"
+	@echo "  release       - Release build with code signing"
+	@echo "  run           - Build and run debug"
+	@echo "  clean         - Clean build artifacts"
 	@echo "  dmg          - Create distributable DMG"
 	@echo "  notarize     - Notarize the DMG (requires credentials)"
 	@echo "  tag          - Tag a release (VERSION=x.y.z)"

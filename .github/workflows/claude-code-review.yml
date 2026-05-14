@@ -12,11 +12,12 @@ on:
 
 jobs:
   claude-review:
-    # Optional: Filter by PR author
-    # if: |
-    #   github.event.pull_request.user.login == 'external-contributor' ||
-    #   github.event.pull_request.user.login == 'new-developer' ||
-    #   github.event.pull_request.author_association == 'FIRST_TIME_CONTRIBUTOR'
+    # Only run on same-repo PRs. Forked PRs don't have access to the
+    # CLAUDE_CODE_OAUTH_TOKEN secret, so this job would always fail on
+    # external contributions and show a red check on every public PR.
+    # Same-repo PRs (maintainer working on feature branches) still get
+    # automated review.
+    if: github.event.pull_request.head.repo.full_name == github.repository
 
     runs-on: ubuntu-latest
     permissions:

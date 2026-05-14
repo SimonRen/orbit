@@ -80,7 +80,6 @@ targets:
       path: orbit/Resources/orbit.entitlements
       properties:
         com.apple.security.app-sandbox: false
-        com.apple.security.automation.apple-events: true
 
   com.orbit.helper:
     type: tool

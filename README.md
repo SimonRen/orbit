@@ -68,7 +68,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for details, especially if you don't have
 
 Orbit ships an optional `orb-kubectl` — a custom kubectl build with **retry support** for port-forwarding (auto-reconnects on transient failures).
 
-- **Install**: *Orbit menu → Install orb-kubectl...*
+- **Install**: *Orbit menu → Settings → Tools → Install...* — you'll see a trust dialog showing the source repo (`github.com/simonren/kubernetes`, branch `feature/resilient-port-forward`), expected SHA-256, and where the binary gets installed. You can decline and stick with plain `kubectl` from your `$PATH`.
 - **Use**: substitute `orb-kubectl` for `kubectl` in any service command, then add `--retry`:
   ```bash
   orb-kubectl port-forward --address $IP svc/my-service 8080:8080 --retry
@@ -78,7 +78,7 @@ Orbit ships an optional `orb-kubectl` — a custom kubectl build with **retry su
 ## Requirements
 
 - macOS 13.0 or later
-- Admin password on first launch (installs the privileged helper for `lo0` aliases)
+- Optional: admin password once, if you let Orbit install a privileged helper to manage `lo0` aliases automatically. You can decline at first-run and manage the aliases yourself with `sudo ifconfig` — see [Network & Helper](#how-it-works) below.
 
 ## How it works
 

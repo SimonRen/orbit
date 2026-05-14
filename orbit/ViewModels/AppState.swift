@@ -12,7 +12,6 @@ final class AppState: ObservableObject {
 
     @Published var environments: [DevEnvironment] = []
     @Published var selectedEnvironmentId: UUID?
-    @Published var guestMode: Bool = false
     @Published var lastError: AppError?
     @Published var showHelperInstallPrompt: Bool = false
     @Published var showHelperUpgradePrompt: Bool = false
@@ -57,9 +56,6 @@ final class AppState: ObservableObject {
     private var helperOwnedActivations: Set<UUID> = []
 
     // MARK: - Runtime State
-
-    /// Previously active environments before guest mode
-    var previouslyActiveEnvironmentIds: [UUID] = []
 
     /// Cooldown tracking to prevent rapid toggle clicks
     private var lastEnvironmentToggleTime: [UUID: Date] = [:]
@@ -1144,7 +1140,11 @@ final class AppState: ObservableObject {
     func importEnvironment(_ preview: ImportPreview, name: String, useSuggestedIPs: Bool = true) -> DevEnvironment {
         let interfaces = useSuggestedIPs ? preview.suggestedInterfaces : preview.originalInterfaces
 
-        // Create services with new UUIDs
+        // Create services with new UUIDs. Imported services land DISABLED
+        // regardless of the source file's isEnabled flag — the user must
+        // explicitly toggle them on after reviewing the command. This guards
+        // against a shared .orbit.json silently auto-running attacker-supplied
+        // shell on import.
         var newServices: [Service] = []
         for exportedService in preview.services {
             let service = Service(
@@ -1152,7 +1152,7 @@ final class AppState: ObservableObject {
                 name: exportedService.name,
                 ports: exportedService.ports,
                 command: exportedService.command,
-                isEnabled: exportedService.isEnabled,
+                isEnabled: false,
                 order: exportedService.order
             )
             newServices.append(service)
@@ -1452,7 +1452,8 @@ final class AppState: ObservableObject {
                 }
             }
 
-            // Create services with new UUIDs
+            // Services from a bulk import always land DISABLED — see
+            // importEnvironment() for rationale.
             var newServices: [Service] = []
             for exportedService in preview.preview.services {
                 let service = Service(
@@ -1460,7 +1461,7 @@ final class AppState: ObservableObject {
                     name: exportedService.name,
                     ports: exportedService.ports,
                     command: exportedService.command,
-                    isEnabled: exportedService.isEnabled,
+                    isEnabled: false,
                     order: exportedService.order
                 )
                 newServices.append(service)
