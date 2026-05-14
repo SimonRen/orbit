@@ -51,14 +51,19 @@ final class ProcessManager {
         process.arguments = ["-c", resolvedCommand]
         process.currentDirectoryURL = FileManager.default.homeDirectoryForCurrentUser
 
-        // Setup environment - preserve user's PATH and prepend Orbit's bin directory
+        // Setup environment. PATH ordering matters for security: Orbit's bin
+        // directory lives under ~/Library/Application Support, which is
+        // user-writable. If we put it FIRST on PATH, a malicious local
+        // process that drops `bash` (or any other common binary) there would
+        // hijack execution. Put system paths first; append Orbit's bin LAST
+        // so orb-kubectl can be found by bare name but can't shadow system tools.
         var environment = ProcessInfo.processInfo.environment
 
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         let orbitBinPath = appSupport.appendingPathComponent("Orbit/bin").path
         let commonPaths = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
         let existingPath = environment["PATH"] ?? ""
-        environment["PATH"] = "\(orbitBinPath):\(commonPaths):\(existingPath)"
+        environment["PATH"] = "\(commonPaths):\(existingPath):\(orbitBinPath)"
         process.environment = environment
 
         // Setup pipes for stdout/stderr

@@ -36,6 +36,18 @@ protocol HelperProtocol {
     /// Unregister from orphan monitoring (graceful shutdown)
     /// - Parameter reply: Callback with success status and optional error message
     func unregisterApp(withReply reply: @escaping (Bool, String?) -> Void)
+
+    // MARK: - Self-Destruct (helper v1.3.0+)
+
+    /// Delete the helper's own on-disk binary and launchd plist as root,
+    /// then exit. Called by the app immediately before SMJobRemove so the
+    /// uninstall is a real uninstall (SMJobRemove alone leaves the files
+    /// at /Library/PrivilegedHelperTools/ and /Library/LaunchDaemons/
+    /// intact, where they linger forever as root-owned dead files).
+    ///
+    /// Added in helper v1.3.0. Old helpers don't implement this — the
+    /// client should fall back to plain SMJobRemove if this call fails.
+    func selfDestruct(withReply reply: @escaping (Bool, String?) -> Void)
 }
 
 /// Protocol for the app to receive callbacks from helper
@@ -48,5 +60,5 @@ protocol HelperProgressProtocol {
 /// Helper identification constants
 enum HelperConstants {
     static let machServiceName = "com.orbit.helper"
-    static let helperVersion = "1.2.0"  // Fixed orphan cleanup race condition
+    static let helperVersion = "1.3.0"  // Added selfDestruct + PGID descendant validation
 }

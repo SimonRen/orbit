@@ -51,14 +51,55 @@ class OrphanMonitor {
 
     func updateProcessGroups(_ pgids: [pid_t]) -> (success: Bool, error: String?) {
         return queue.sync {
-            guard registration != nil else {
+            guard let reg = registration else {
                 return (false, "No app registered")
             }
 
-            registration?.processGroups = Set(pgids)
-            orphanLog.info("Updated PGIDs: \(pgids)")
+            // Validate every PGID before accepting it: each must reference a
+            // live process whose parent (or transitive ancestor) is the
+            // registered app. This prevents a compromised app (or any signed
+            // peer impersonating it) from convincing root to killpg unrelated
+            // process groups on shutdown.
+            var accepted = Set<pid_t>()
+            for pgid in pgids {
+                guard pgid > 0 else { continue }
+                if pgidIsDescendantOf(pgid: pgid, ancestorPid: reg.appPid) {
+                    accepted.insert(pgid)
+                } else {
+                    orphanLog.warning("Rejected PGID \(pgid): not a descendant of app PID \(reg.appPid)")
+                }
+            }
+
+            registration?.processGroups = accepted
+            orphanLog.info("Updated PGIDs (accepted): \(accepted)")
             return (true, nil)
         }
+    }
+
+    /// Check that a PGID belongs to a process whose ancestor chain includes
+    /// the registered app PID. Walks parent PIDs via `kinfo_proc` until we
+    /// hit the registered app, init (pid 1), or a missing process.
+    private func pgidIsDescendantOf(pgid: pid_t, ancestorPid: pid_t) -> Bool {
+        // The PGID is itself a PID — the process group leader. Start there.
+        var current: pid_t = pgid
+        var hops = 0
+        while current > 1 && hops < 64 {
+            if current == ancestorPid { return true }
+            guard let parent = parentPid(of: current) else { return false }
+            current = parent
+            hops += 1
+        }
+        return false
+    }
+
+    /// Return the parent PID for `pid`, or nil if the process doesn't exist.
+    private func parentPid(of pid: pid_t) -> pid_t? {
+        var info = kinfo_proc()
+        var size = MemoryLayout<kinfo_proc>.stride
+        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
+        let result = sysctl(&mib, UInt32(mib.count), &info, &size, nil, 0)
+        guard result == 0, size > 0 else { return nil }
+        return info.kp_eproc.e_ppid
     }
 
     func unregister() -> (success: Bool, error: String?) {
@@ -279,6 +320,40 @@ class HelperTool: NSObject, NSXPCListenerDelegate, HelperProtocol {
     func unregisterApp(withReply reply: @escaping (Bool, String?) -> Void) {
         let result = orphanMonitor.unregister()
         reply(result.success, result.error)
+    }
+
+    // MARK: - Self-Destruct
+
+    func selfDestruct(withReply reply: @escaping (Bool, String?) -> Void) {
+        // Best-effort delete of the on-disk artifacts that SMJobBless places
+        // (paths are stable per Apple's SMJobBless contract and have been since
+        // macOS 10.6).
+        let paths = [
+            "/Library/LaunchDaemons/com.orbit.helper.plist",
+            "/Library/PrivilegedHelperTools/com.orbit.helper",
+        ]
+        var lastError: String?
+        for path in paths {
+            do {
+                try FileManager.default.removeItem(atPath: path)
+                helperLog.info("Self-destruct removed: \(path, privacy: .public)")
+            } catch {
+                let ns = error as NSError
+                // Don't fail on "doesn't exist" — that's fine.
+                if ns.domain == NSCocoaErrorDomain && ns.code == NSFileNoSuchFileError { continue }
+                helperLog.error("Self-destruct failed to remove \(path, privacy: .public): \(error.localizedDescription, privacy: .public)")
+                lastError = error.localizedDescription
+            }
+        }
+
+        reply(lastError == nil, lastError)
+
+        // The reply must flush before we exit, so schedule the exit on the
+        // run loop a moment later. The app will follow up with SMJobRemove
+        // regardless.
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.2) {
+            exit(0)
+        }
     }
 
     // MARK: - Private Methods

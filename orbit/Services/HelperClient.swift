@@ -136,7 +136,17 @@ final class HelperClient: ObservableObject {
     /// were originally registered via SMJobBless, so we use SMJobRemove
     /// regardless of macOS version. It's deprecated but still functional and
     /// is the only API that reliably reverses an SMJobBless install.)
+    ///
+    /// SMJobRemove alone leaves the helper's launchd plist and binary on
+    /// disk forever. To make uninstall a real uninstall we first ask the
+    /// helper (v1.3.0+) to delete its own files via the selfDestruct RPC.
+    /// Older helpers don't implement selfDestruct; that call will fail
+    /// silently and we proceed with SMJobRemove anyway.
     func uninstallHelper() async throws {
+        // Best-effort: ask the helper to self-destruct first. Ignore failures
+        // (old helper, already gone, etc.) and proceed to SMJobRemove.
+        try? await selfDestructHelper()
+
         var authRef: AuthorizationRef?
         let authStatus = AuthorizationCreate(nil, nil, [], &authRef)
 
@@ -182,6 +192,37 @@ final class HelperClient: ObservableObject {
         } else {
             let errorDesc = error?.takeRetainedValue().localizedDescription ?? "Unknown error"
             throw HelperClientError.installationFailed(errorDesc)
+        }
+    }
+
+    /// Ask the helper (v1.3.0+) to delete its own binary and launchd plist.
+    /// Always best-effort: old helpers don't implement this and will fail with
+    /// a connection error; we silently fall through to SMJobRemove.
+    private func selfDestructHelper() async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            let resumed = OnceFlag()
+            getHelperProxy { proxy in
+                guard let proxy = proxy else {
+                    if resumed.trySet() {
+                        continuation.resume(throwing: HelperClientError.connectionFailed)
+                    }
+                    return
+                }
+                proxy.selfDestruct { success, errorMessage in
+                    guard resumed.trySet() else { return }
+                    if success {
+                        continuation.resume()
+                    } else {
+                        continuation.resume(throwing: HelperClientError.operationFailed(
+                            errorMessage ?? "selfDestruct unsupported (probably an older helper)"
+                        ))
+                    }
+                }
+            } errorHandler: {
+                if resumed.trySet() {
+                    continuation.resume(throwing: HelperClientError.connectionFailed)
+                }
+            }
         }
     }
 
