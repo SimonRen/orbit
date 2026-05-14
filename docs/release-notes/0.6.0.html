@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            padding: 20px;
+            max-width: 640px;
+            line-height: 1.55;
+            background: #ffffff;
+            color: #333;
+        }
+        h2 { color: #1a1a1a; border-bottom: 1px solid #ddd; padding-bottom: 8px; }
+        h3 { color: #1a1a1a; margin-top: 22px; }
+        ul { padding-left: 20px; }
+        li { margin: 6px 0; }
+        .note { background: #fff8e1; border-left: 3px solid #f5a623; padding: 10px 14px; margin: 14px 0; }
+        code { background: #f3f3f3; padding: 1px 5px; border-radius: 3px; font-size: 0.92em; }
+        @media (prefers-color-scheme: dark) {
+            body { background: #2d2d2d; color: #e0e0e0; }
+            h2, h3 { color: #ffffff; border-bottom-color: #555; }
+            .note { background: #3a3220; }
+            code { background: #1f1f1f; }
+        }
+    </style>
+</head>
+<body>
+    <h2>What's New in Orbit 0.6.0</h2>
+
+    <p>Orbit is now open source under the MIT License: <a href="https://github.com/simonren/orbit">github.com/simonren/orbit</a>. This release brings new features, a real help system, security hardening, and broad UX polish.</p>
+
+    <h3>New features</h3>
+    <ul>
+        <li><strong>Launch at startup</strong> — opt in via Settings → General, or check the box on the first-run welcome sheet.</li>
+        <li><strong>Optional helper / non-root mode</strong> — you can decline the privileged helper and manage <code>lo0</code> aliases yourself with <code>sudo ifconfig</code>. Orbit prompts with a one-click "Install Helper Now" or shows the manual command on bind failure.</li>
+        <li><strong>First-run welcome sheet</strong> — quick yes/no on launch-at-login and helper install, with clear what-each-does context. Existing users see no prompt on update; their setup is preserved.</li>
+        <li><strong>Settings window</strong> (⌘,) — manage launch-at-login, helper install/uninstall, and orb-kubectl install/uninstall in one place.</li>
+        <li><strong>Orbit Help window</strong> — accessible via Help → Orbit Help (⌘?). Twelve articles covering environments, services, K8s import, the privileged helper, network modes, settings, and a troubleshooting playbook. Fully offline; searchable.</li>
+    </ul>
+
+    <h3>orb-kubectl trust improvements</h3>
+    <ul>
+        <li>SHA-256 of the downloaded archive is verified against a value pinned in Orbit before installation. A mismatch aborts; the on-disk binary is not replaced.</li>
+        <li>Install dialog discloses the source fork (<code>github.com/simonren/kubernetes</code>, branch <code>feature/resilient-port-forward</code>), the exact patch path, the expected checksum, and install location — with an explicit "decline and use plain kubectl" alternative.</li>
+        <li>Management moved into Settings → Tools (single source of truth).</li>
+        <li>If orb-kubectl isn't installed, the Kubernetes Import sheet now defaults to plain <code>kubectl</code> from <code>$PATH</code> (previously it could get stuck on orb-kubectl with the picker disabled).</li>
+    </ul>
+
+    <h3>Security & robustness</h3>
+    <ul>
+        <li><strong>Privileged helper v1.3.0</strong> — adds a self-destruct RPC so Uninstall actually removes the on-disk plist and binary (previously left as inert root-owned files). Also tightens process-group cleanup: the helper now validates that any PGID it would <code>killpg</code> is a descendant of the registered app PID.</li>
+        <li><strong>Import safety</strong> — service commands are now displayed in the import preview (single + bulk), and imported services land disabled by default. A shared <code>.orbit.json</code> can no longer auto-run attacker-supplied shell when toggled.</li>
+        <li><strong>PATH hardening</strong> — Orbit's user-writable bin directory is now appended to <code>$PATH</code> for spawned services, not prepended. System binaries (<code>bash</code>, <code>kubectl</code>, etc.) always resolve from system paths first.</li>
+        <li>Apache-2.0 attribution for orb-kubectl in <code>NOTICE</code>; source fork referenced in the in-app trust disclosure.</li>
+    </ul>
+
+    <h3>UX polish</h3>
+    <ul>
+        <li>Menubar popover switched to the native rounded-rectangle <code>MenuBarExtra</code> style with system frosted material (matches Tailscale, Just Focus, etc.). The triangular pointer is gone.</li>
+        <li>"Copy for AI" button in the environment detail header is now a labeled button with a green ✓ confirmation when clicked, and the header buttons are reordered for clearer intent.</li>
+        <li>Bumped small text in sheets from 10 pt to 12 pt for readability.</li>
+        <li>Esc closes the log window; main window no longer beeps on Esc.</li>
+        <li>"Show Window" in the menubar popup now actually dismisses the popup.</li>
+        <li>Toggling an environment that needs an admin action from the menubar now opens the main window so the prompt is visible.</li>
+    </ul>
+
+    <div class="note">
+        <strong>One-time admin prompt on upgrade.</strong> When you first activate an environment after updating, Orbit will ask permission to upgrade its privileged helper from v1.2.0 to v1.3.0. This is the helper-side change for the cleaner uninstall and tighter process-group validation above. Approve once and the prompt won't appear again.
+    </div>
+</body>
+</html>
