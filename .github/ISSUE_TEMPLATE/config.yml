@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/simonren/orbit/security/policy
+    about: Please do NOT report security issues here. See SECURITY.md.
+  - name: Questions & discussion
+    url: https://github.com/simonren/orbit/discussions
+    about: Ask a question, share usage tips, or discuss ideas before opening an issue.

@@ -14,7 +14,9 @@ APP_NAME := Orbit
 SCHEME := orbit
 PROJECT := orbit.xcodeproj
 BUNDLE_ID := com.orbit.app
-TEAM_ID := DN4YAHWP2P
+# Override with: TEAM_ID=ABCD123456 make ...
+# Or set DEVELOPMENT_TEAM in Config/Project.local.xcconfig (see CONTRIBUTING.md)
+TEAM_ID ?= DN4YAHWP2P
 
 # Paths
 BUILD_DIR := $(HOME)/Library/Developer/Xcode/DerivedData/orbit-*/Build/Products

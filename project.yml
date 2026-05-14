@@ -14,24 +14,25 @@ packages:
     url: https://github.com/weichsel/ZIPFoundation
     from: 0.9.0
 
+configFiles:
+  Debug: Config/Project.xcconfig
+  Release: Config/Project.xcconfig
+
 settings:
   base:
     MARKETING_VERSION: "0.5.17"
     CURRENT_PROJECT_VERSION: "22"
-    DEVELOPMENT_TEAM: "DN4YAHWP2P"
     CODE_SIGN_STYLE: Manual
     SWIFT_VERSION: "5.9"
     ARCHS: "arm64 x86_64"
   configs:
     Debug:
-      # Debug: Sign with Developer ID but allow debugging
-      # Build only active arch for faster dev builds
-      CODE_SIGN_IDENTITY: "Developer ID Application"
+      # Debug: build only active arch for faster dev builds.
+      # DEVELOPMENT_TEAM and CODE_SIGN_IDENTITY live in Config/Project.xcconfig
+      # so contributors can override them without editing project.yml.
       ONLY_ACTIVE_ARCH: YES
     Release:
-      # Release: Sign with Developer ID + timestamp for notarization
-      # Build universal binary (both arm64 and x86_64)
-      CODE_SIGN_IDENTITY: "Developer ID Application"
+      # Release: universal binary, --timestamp for notarization.
       OTHER_CODE_SIGN_FLAGS: "--timestamp"
       ONLY_ACTIVE_ARCH: NO
 
@@ -114,9 +115,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.orbit.app.tests
         GENERATE_INFOPLIST_FILE: YES
-        CODE_SIGN_STYLE: Manual
-        CODE_SIGN_IDENTITY: "Developer ID Application"
-        DEVELOPMENT_TEAM: "DN4YAHWP2P"
+        # Inherits DEVELOPMENT_TEAM and CODE_SIGN_IDENTITY from project-level
+        # Config/Project.xcconfig (overridable via Config/Project.local.xcconfig).
         TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Orbit.app/Contents/MacOS/Orbit"
         BUNDLE_LOADER: "$(TEST_HOST)"
 

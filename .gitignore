@@ -72,8 +72,16 @@ credentials/
 
 # Release artifacts
 releases/
-.claude/
+dist/
 
 # Vendored binaries (too large for git, released separately)
 vendor/
+
+# Local build/team-ID overrides for contributors (see CONTRIBUTING.md)
+Config/Project.local.xcconfig
+
+# Agent / assistant artifacts (not part of the public repo)
+.claude/
 .superpowers/
+.jarvis/
+docs/superpowers/

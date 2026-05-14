@@ -1,5 +1,8 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import os.log
+
+private let logger = Logger(subsystem: "com.orbit.app", category: "SidebarView")
 
 /// Sidebar showing the list of environments
 struct SidebarView: View {
@@ -245,7 +248,7 @@ struct SidebarView: View {
                 do {
                     try data.write(to: url)
                 } catch {
-                    print("Failed to export: \(error)")
+                    logger.error("Failed to export environment: \(error.localizedDescription, privacy: .public)")
                 }
             }
         }
@@ -330,7 +333,7 @@ struct SidebarView: View {
                 do {
                     try data.write(to: url)
                 } catch {
-                    print("Failed to export archive: \(error)")
+                    logger.error("Failed to export archive: \(error.localizedDescription, privacy: .public)")
                 }
             }
         }

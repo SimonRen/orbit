@@ -1,0 +1,23 @@
+// Default code signing settings for Orbit.
+//
+// Contributors building locally with their own Apple Developer account:
+// create Config/Project.local.xcconfig (gitignored) with your team ID, e.g.:
+//
+//     DEVELOPMENT_TEAM = ABCD123456
+//     CODE_SIGN_IDENTITY = Apple Development
+//
+// To build without signing (CI, local Debug runs without the helper):
+// pass CODE_SIGNING_ALLOWED=NO to xcodebuild.
+//
+// Note: changing DEVELOPMENT_TEAM alone won't let SMJobBless install the
+// privileged helper — for that you also need to swap the team ID in:
+//   - orbit/Resources/Info.plist  (SMPrivilegedExecutables)
+//   - orbitHelper/Info.plist      (SMAuthorizedClients)
+//   - orbitHelper/main.swift      (codeSigningRequirement)
+// See CONTRIBUTING.md for the full override procedure.
+
+DEVELOPMENT_TEAM = DN4YAHWP2P
+CODE_SIGN_IDENTITY = Developer ID Application
+
+// Optional per-contributor override (won't fail if missing).
+#include? "Project.local.xcconfig"

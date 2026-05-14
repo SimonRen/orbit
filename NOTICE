@@ -1,0 +1,26 @@
+Orbit
+Copyright (c) 2025 Simon Ren
+Licensed under the MIT License (see LICENSE).
+
+This product includes the following third-party software:
+
+--------------------------------------------------------------------------------
+Sparkle
+  Auto-update framework for macOS apps.
+  Copyright (c) Sparkle Project and contributors.
+  Licensed under the MIT License.
+  https://github.com/sparkle-project/Sparkle
+
+--------------------------------------------------------------------------------
+ZIPFoundation
+  Effortless ZIP handling in Swift.
+  Copyright (c) Thomas Zoechling.
+  Licensed under the MIT License.
+  https://github.com/weichsel/ZIPFoundation
+
+--------------------------------------------------------------------------------
+XcodeGen (development dependency)
+  Generates Xcode projects from a YAML spec.
+  Copyright (c) Yonas Kolb.
+  Licensed under the MIT License.
+  https://github.com/yonaskolb/XcodeGen
