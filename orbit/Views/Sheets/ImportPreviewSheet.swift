@@ -32,7 +32,7 @@ struct ImportPreviewSheet: View {
 
                         if preview.hasNameConflict {
                             Label("Name conflict", systemImage: "exclamationmark.triangle.fill")
-                                .font(.caption)
+                                .font(.callout)
                                 .foregroundColor(.orange)
                         }
                     }
@@ -49,7 +49,7 @@ struct ImportPreviewSheet: View {
 
                     if preview.hasNameConflict {
                         Text("An environment with this name already exists. The name has been adjusted.")
-                            .font(.caption)
+                            .font(.callout)
                             .foregroundColor(.secondary)
                     }
                 }
@@ -62,7 +62,7 @@ struct ImportPreviewSheet: View {
 
                         if preview.hasIPConflicts {
                             Label("\(preview.conflictingIPs.count) conflict(s)", systemImage: "exclamationmark.triangle.fill")
-                                .font(.caption)
+                                .font(.callout)
                                 .foregroundColor(.orange)
                         }
                     }
@@ -88,7 +88,7 @@ struct ImportPreviewSheet: View {
 
                     if preview.hasIPConflicts {
                         Toggle("Use suggested IPs to avoid conflicts", isOn: $useSuggestedIPs)
-                            .font(.caption)
+                            .font(.callout)
                             .toggleStyle(.checkbox)
                     }
                 }
@@ -99,7 +99,7 @@ struct ImportPreviewSheet: View {
                         Text("Services")
                             .font(.headline)
                         Text("(\(preview.services.count))")
-                            .font(.caption)
+                            .font(.callout)
                             .foregroundColor(.secondary)
                     }
 
@@ -188,7 +188,7 @@ struct ImportPreviewSheet: View {
 
             if isConflicting && useSuggestedIPs && originalIP != ip {
                 Text("(was \(originalIP))")
-                    .font(.caption)
+                    .font(.callout)
                     .foregroundColor(.orange)
             } else if isConflicting && !useSuggestedIPs {
                 Image(systemName: "exclamationmark.circle.fill")
@@ -211,7 +211,7 @@ struct ImportPreviewSheet: View {
                 Text(service.name)
                     .font(.body)
                 Text("Ports: \(service.ports)")
-                    .font(.caption)
+                    .font(.callout)
                     .foregroundColor(.secondary)
             }
 

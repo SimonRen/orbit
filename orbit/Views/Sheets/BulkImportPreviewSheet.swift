@@ -41,7 +41,7 @@ struct BulkImportPreviewSheet: View {
                     selectAll()
                 } label: {
                     Text("Select All")
-                        .font(.caption)
+                        .font(.callout)
                 }
                 .buttonStyle(.link)
 
@@ -49,7 +49,7 @@ struct BulkImportPreviewSheet: View {
                     deselectAll()
                 } label: {
                     Text("Deselect All")
-                        .font(.caption)
+                        .font(.callout)
                 }
                 .buttonStyle(.link)
 
@@ -60,7 +60,7 @@ struct BulkImportPreviewSheet: View {
                         applySuggestedToAll()
                     } label: {
                         Label("Use suggested IPs for all", systemImage: "wand.and.stars")
-                            .font(.caption)
+                            .font(.callout)
                     }
                     .buttonStyle(.link)
                 }
@@ -97,18 +97,18 @@ struct BulkImportPreviewSheet: View {
             HStack {
                 let selectedCount = environmentPreviews.filter { $0.isSelected }.count
                 Text("\(selectedCount) of \(environmentPreviews.count) selected for import")
-                    .font(.caption)
+                    .font(.callout)
                     .foregroundColor(.secondary)
 
                 Spacer()
 
                 if hasEmptyNames {
                     Label("Empty names", systemImage: "exclamationmark.circle.fill")
-                        .font(.caption)
+                        .font(.callout)
                         .foregroundColor(.red)
                 } else if conflictCount > 0 {
                     Label("\(conflictCount) with conflicts", systemImage: "exclamationmark.triangle.fill")
-                        .font(.caption)
+                        .font(.callout)
                         .foregroundColor(.orange)
                 }
             }
@@ -245,12 +245,12 @@ private struct EnvironmentRow: View {
                     HStack(spacing: 8) {
                         // Interface summary
                         Text(interfaceSummary)
-                            .font(.caption)
+                            .font(.callout)
                             .foregroundColor(.secondary)
 
                         // Services count
                         Text("\(preview.preview.services.count) service\(preview.preview.services.count == 1 ? "" : "s")")
-                            .font(.caption)
+                            .font(.callout)
                             .foregroundColor(.secondary)
                     }
                 }
@@ -261,11 +261,11 @@ private struct EnvironmentRow: View {
                 if preview.preview.hasIPConflicts {
                     Toggle("Suggested IPs", isOn: $preview.useSuggestedIPs)
                         .toggleStyle(.checkbox)
-                        .font(.caption)
+                        .font(.callout)
                         .labelsHidden()
 
                     Text("Use suggested")
-                        .font(.caption)
+                        .font(.callout)
                         .foregroundColor(.secondary)
                 }
 
@@ -291,7 +291,7 @@ private struct EnvironmentRow: View {
                     // Interfaces
                     VStack(alignment: .leading, spacing: 4) {
                         Text("Interfaces")
-                            .font(.caption)
+                            .font(.callout)
                             .fontWeight(.medium)
                             .foregroundColor(.secondary)
 
@@ -299,16 +299,16 @@ private struct EnvironmentRow: View {
                             HStack(spacing: 8) {
                                 let varName = index == 0 ? "$IP" : "$IP\(index + 1)"
                                 Text(varName)
-                                    .font(.system(.caption, design: .monospaced))
+                                    .font(.system(.callout, design: .monospaced))
                                     .foregroundColor(.secondary)
                                     .frame(width: 35, alignment: .leading)
 
                                 Text(interface.ip)
-                                    .font(.system(.caption, design: .monospaced))
+                                    .font(.system(.callout, design: .monospaced))
 
                                 if let domain = interface.domain, !domain.isEmpty {
                                     Text("→ \(domain)")
-                                        .font(.caption)
+                                        .font(.callout)
                                         .foregroundColor(.secondary)
                                 }
 
@@ -316,7 +316,7 @@ private struct EnvironmentRow: View {
                                 let original = preview.preview.originalInterfaces[safe: index]?.ip ?? ""
                                 if preview.useSuggestedIPs && original != interface.ip {
                                     Text("(was \(original))")
-                                        .font(.caption)
+                                        .font(.callout)
                                         .foregroundColor(.orange)
                                 }
                             }
@@ -327,21 +327,21 @@ private struct EnvironmentRow: View {
                     if !preview.preview.services.isEmpty {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Services")
-                                .font(.caption)
+                                .font(.callout)
                                 .fontWeight(.medium)
                                 .foregroundColor(.secondary)
 
                             ForEach(Array(preview.preview.services.enumerated()), id: \.offset) { _, service in
                                 HStack(spacing: 8) {
                                     Image(systemName: service.isEnabled ? "checkmark.circle.fill" : "circle")
-                                        .font(.caption)
+                                        .font(.callout)
                                         .foregroundColor(service.isEnabled ? .green : .secondary)
 
                                     Text(service.name)
-                                        .font(.caption)
+                                        .font(.callout)
 
                                     Text("(\(service.ports))")
-                                        .font(.caption)
+                                        .font(.callout)
                                         .foregroundColor(.secondary)
                                 }
                             }
@@ -380,7 +380,7 @@ private struct ConflictBadge: View {
                 .imageScale(.small)
             Text(text)
         }
-        .font(.caption2)
+        .font(.callout)
         .foregroundColor(.orange)
         .padding(.horizontal, 6)
         .padding(.vertical, 2)

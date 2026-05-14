@@ -86,7 +86,7 @@ struct K8sImportSheet: View {
                 Text("Import from Kubernetes")
                     .font(.headline)
                 Text("Select services to import as port-forward commands")
-                    .font(.caption)
+                    .font(.callout)
                     .foregroundColor(.secondary)
             }
             Spacer()
@@ -102,7 +102,7 @@ struct K8sImportSheet: View {
             // Context picker
             VStack(alignment: .leading, spacing: 4) {
                 Text("CONTEXT")
-                    .font(.caption2)
+                    .font(.callout)
                     .foregroundColor(.secondary)
                 Picker("", selection: $selectedContext) {
                     ForEach(contexts, id: \.self) { ctx in
@@ -121,7 +121,7 @@ struct K8sImportSheet: View {
             // Tool toggle
             VStack(alignment: .leading, spacing: 4) {
                 Text("TOOL")
-                    .font(.caption2)
+                    .font(.callout)
                     .foregroundColor(.secondary)
                 Picker("", selection: $selectedTool) {
                     Text("kubectl").tag("kubectl")
@@ -156,10 +156,10 @@ struct K8sImportSheet: View {
             HStack {
                 Image(systemName: "magnifyingglass")
                     .foregroundColor(.secondary)
-                    .font(.caption)
+                    .font(.callout)
                 TextField("Search namespaces", text: $namespaceSearch)
                     .textFieldStyle(.plain)
-                    .font(.caption)
+                    .font(.callout)
             }
             .padding(8)
 
@@ -174,7 +174,7 @@ struct K8sImportSheet: View {
             } else if namespaces.isEmpty && !isLoadingContexts {
                 Spacer()
                 Text(errorMessage ?? "No namespaces")
-                    .font(.caption)
+                    .font(.callout)
                     .foregroundColor(.secondary)
                 Spacer()
             } else {
@@ -225,10 +225,10 @@ struct K8sImportSheet: View {
             HStack {
                 Image(systemName: "magnifyingglass")
                     .foregroundColor(.secondary)
-                    .font(.caption)
+                    .font(.callout)
                 TextField("Search services", text: $serviceSearch)
                     .textFieldStyle(.plain)
-                    .font(.caption)
+                    .font(.callout)
             }
             .padding(8)
 
@@ -241,7 +241,7 @@ struct K8sImportSheet: View {
                 Text("TYPE").frame(width: 80, alignment: .leading)
                 Text("PORTS").frame(width: 100, alignment: .leading)
             }
-            .font(.caption2)
+            .font(.callout)
             .foregroundColor(.secondary)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
@@ -257,13 +257,13 @@ struct K8sImportSheet: View {
             } else if selectedNamespace == nil {
                 Spacer()
                 Text("Select a namespace")
-                    .font(.caption)
+                    .font(.callout)
                     .foregroundColor(.secondary)
                 Spacer()
             } else if services.isEmpty {
                 Spacer()
                 Text("No services found")
-                    .font(.caption)
+                    .font(.callout)
                     .foregroundColor(.secondary)
                 Spacer()
             } else {
@@ -330,14 +330,14 @@ struct K8sImportSheet: View {
             if errorMessage != nil && namespaces.isEmpty && services.isEmpty {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundColor(.yellow)
-                    .font(.caption)
+                    .font(.callout)
                 Text(errorMessage ?? "")
-                    .font(.caption)
+                    .font(.callout)
                     .foregroundColor(.secondary)
                     .lineLimit(2)
             } else {
                 Text("\(selectedCount) service\(selectedCount == 1 ? "" : "s") selected")
-                    .font(.caption)
+                    .font(.callout)
                     .foregroundColor(.secondary)
             }
 

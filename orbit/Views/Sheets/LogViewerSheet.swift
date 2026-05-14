@@ -28,7 +28,7 @@ struct LogViewerSheet: View {
                 HStack(spacing: 6) {
                     StatusDotView(status: service.status)
                     Text(service.status.rawValue.capitalized)
-                        .font(.caption)
+                        .font(.callout)
                         .foregroundColor(.secondary)
                 }
 
@@ -83,7 +83,7 @@ struct LogViewerSheet: View {
                 Spacer()
 
                 Text("\(logs.count) entries")
-                    .font(.caption)
+                    .font(.callout)
                     .foregroundColor(.secondary)
 
                 Button("Copy All") {
@@ -111,7 +111,7 @@ struct LogViewerSheet: View {
                 .font(.headline)
                 .foregroundColor(.secondary)
             Text("Logs will appear here when the service runs")
-                .font(.caption)
+                .font(.callout)
                 .foregroundColor(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -141,7 +141,7 @@ struct LogEntryView: View {
                 .foregroundColor(entry.stream == .stderr ? .red : .primary)
                 .textSelection(.enabled)
         }
-        .font(.system(.caption, design: .monospaced))
+        .font(.system(.callout, design: .monospaced))
     }
 }
 

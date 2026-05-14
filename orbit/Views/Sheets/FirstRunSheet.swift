@@ -33,13 +33,13 @@ struct FirstRunSheet: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Launch Orbit at startup")
                         Text("Open Orbit automatically when you log in.")
-                            .font(.caption)
+                            .font(.callout)
                             .foregroundStyle(.secondary)
                     }
                 }
                 if let err = loginItemError {
                     Text(err)
-                        .font(.caption)
+                        .font(.callout)
                         .foregroundStyle(.red)
                         .padding(.leading, 24)
                 }
@@ -48,14 +48,14 @@ struct FirstRunSheet: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Automatically configure loopback interfaces")
                         Text("Installs a small privileged helper. Without it, you'll need to run sudo ifconfig manually before activating environments. Recommended.")
-                            .font(.caption)
+                            .font(.callout)
                             .foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 if let err = helperError {
                     Text(err)
-                        .font(.caption)
+                        .font(.callout)
                         .foregroundStyle(.red)
                         .padding(.leading, 24)
                 }

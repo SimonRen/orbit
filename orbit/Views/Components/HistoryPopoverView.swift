@@ -24,7 +24,7 @@ struct HistoryPopoverView: View {
                     Text("No history yet")
                         .foregroundColor(.secondary)
                     Text("Changes will appear here")
-                        .font(.caption)
+                        .font(.callout)
                         .foregroundColor(.secondary)
                 }
                 .frame(maxWidth: .infinity)
@@ -76,7 +76,7 @@ struct HistoryRowView: View {
                     .font(.subheadline)
                     .fontWeight(.medium)
                 Text("\"\(snapshot.data.name)\", \(snapshot.data.services.count) services")
-                    .font(.caption)
+                    .font(.callout)
                     .foregroundColor(.secondary)
             }
 

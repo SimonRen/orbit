@@ -58,7 +58,7 @@ struct AddServiceSheet: View {
 
                     if let error = nameError {
                         Text(error)
-                            .font(.caption)
+                            .font(.callout)
                             .foregroundColor(.red)
                     }
                 }
@@ -81,7 +81,7 @@ struct AddServiceSheet: View {
 
                     if let error = portsError {
                         Text(error)
-                            .font(.caption)
+                            .font(.callout)
                             .foregroundColor(.red)
                     }
                 }
@@ -93,7 +93,7 @@ struct AddServiceSheet: View {
                             .font(.headline)
                         Spacer()
                         Text("bash")
-                            .font(.caption)
+                            .font(.callout)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 2)
                             .background(Color(nsColor: .controlBackgroundColor))
@@ -109,7 +109,7 @@ struct AddServiceSheet: View {
 
                     if let error = commandError {
                         Text(error)
-                            .font(.caption)
+                            .font(.callout)
                             .foregroundColor(.red)
                     }
                 }
@@ -155,13 +155,13 @@ struct AddServiceSheet: View {
     private var variableHintBox: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Available Variables")
-                .font(.caption)
+                .font(.callout)
                 .foregroundColor(.secondary)
 
             HStack(spacing: 8) {
                 ForEach(availableVariables, id: \.self) { variable in
                     Text(variable)
-                        .font(.system(.caption, design: .monospaced))
+                        .font(.system(.callout, design: .monospaced))
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
                         .background(Color.accentColor.opacity(0.1))
@@ -178,7 +178,7 @@ struct AddServiceSheet: View {
     private var sampleCommandsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Example Commands")
-                .font(.caption)
+                .font(.callout)
                 .foregroundColor(.secondary)
 
             VStack(spacing: 6) {
@@ -256,10 +256,10 @@ struct SampleCommandRow: View {
         HStack(alignment: .top, spacing: 8) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.caption2)
+                    .font(.callout)
                     .foregroundColor(.secondary)
                 Text(verbatim: command)
-                    .font(.system(.caption, design: .monospaced))
+                    .font(.system(.callout, design: .monospaced))
                     .lineLimit(1)
             }
 
